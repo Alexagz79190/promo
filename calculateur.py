@@ -117,6 +117,7 @@ if st.button("Démarrer le calcul"):
                 prix_vente = row['Prix de vente en cours']
                 prix_base = row[price_column]
                 marge = (prix_vente - prix_base) / prix_vente * 100
+                marge = round(marge, 2)
                 remise = 0
                 for _, remise_row in remises.iterrows():
                     if remise_row['Marge minimale'] <= marge <= remise_row['Marge maximale']:
