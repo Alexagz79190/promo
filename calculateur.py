@@ -1,12 +1,14 @@
 import pandas as pd
 import streamlit as st
 from itertools import product
-from datetime import datetime, time as dt_time
-import time
+from datetime import datetime, time as dt_time  # utilisation d'un alias pour éviter le conflit avec le module time
+import time  # pour time.sleep
 
-# --- Initialisation du session_state pour le log ---
+# --- Initialisation du session_state ---
 if "log" not in st.session_state:
     st.session_state["log"] = []
+if "calcul_done" not in st.session_state:
+    st.session_state["calcul_done"] = False
 
 # --- Création d'un conteneur pour afficher le journal ---
 log_container = st.empty()
@@ -23,15 +25,23 @@ def load_file(file_type):
     uploaded_file = st.file_uploader(f"Charger le fichier {file_type} (format Excel)", type=["xlsx"], key=file_type)
     return uploaded_file
 
-# --- Interface de l'application ---
+# --- Interface principale ---
 st.title("Calculateur de Prix Promo")
 st.sidebar.header("Paramètres")
 
+# --- Section de chargement des fichiers ---
 st.subheader("Chargement des fichiers")
 produit_file = load_file("export produit")
 exclusion_file = load_file("exclusion produit")
 remise_file = load_file("remise")
 
+# Si un fichier produit est chargé, on enregistre son contenu pour permettre son téléchargement
+if produit_file is not None:
+    st.session_state["export_produit_data"] = produit_file.getvalue()
+else:
+    st.session_state["export_produit_data"] = None
+
+# --- Sélection des dates et heures ---
 st.subheader("Sélection des dates")
 start_date = st.date_input("Date de début", value=datetime.now().date())
 start_time = st.time_input("Heure de début", value=dt_time(0, 0))
@@ -40,29 +50,49 @@ end_time = st.time_input("Heure de fin", value=dt_time(23, 59))
 start_datetime = datetime.combine(start_date, start_time)
 end_datetime = datetime.combine(end_date, end_time)
 
+# --- Options de calcul ---
 st.subheader("Options de calcul")
 price_option = st.radio("Choisissez les options de calcul :",
                         options=["Prix d'achat avec option", "Prix de revient"])
 
-# --- Bouton et export des champs nécessaires ---
-if st.button("Exporter les champs nécessaires"):
-    fields = [
-        "Identifiant produit",
-        "Fournisseur : identifiant",
-        "Famille : identifiant",
-        "Marque : identifiant",
-        "Code produit",
-        "Prix de vente en cours",
-        "Prix d'achat avec option",
-        "Prix de revient"
-    ]
-    st.session_state["export_fields"] = "\n".join(fields).encode("utf-8")
-    update_status("Champs nécessaires exportés avec succès.")
-
-if "export_fields" in st.session_state:
-    st.download_button("Télécharger les champs nécessaires",
-                       data=st.session_state["export_fields"],
-                       file_name="champs_export_produit.txt")
+# --- Boutons d'export regroupés dans un conteneur à 3 colonnes ---
+with st.container():
+    col1, col2, col3 = st.columns(3)
+    
+    # Colonne 1 : Téléchargement du fichier export produit (si chargé)
+    with col1:
+        if st.session_state["export_produit_data"] is not None:
+            st.download_button("Télécharger export produit",
+                               data=st.session_state["export_produit_data"],
+                               file_name="export_produit.xlsx")
+    
+    # Colonne 2 : Bouton pour générer et télécharger les champs nécessaires
+    with col2:
+        if st.button("Exporter les champs nécessaires"):
+            fields = [
+                "Identifiant produit",
+                "Fournisseur : identifiant",
+                "Famille : identifiant",
+                "Marque : identifiant",
+                "Code produit",
+                "Prix de vente en cours",
+                "Prix d'achat avec option",
+                "Prix de revient"
+            ]
+            st.session_state["export_fields"] = "\n".join(fields).encode("utf-8")
+            update_status("Champs nécessaires exportés avec succès.")
+        if "export_fields" in st.session_state:
+            st.download_button("Télécharger les champs nécessaires",
+                               data=st.session_state["export_fields"],
+                               file_name="champs_export_produit.txt",
+                               encoding="utf-8-sig")
+    
+    # Colonne 3 : Téléchargement des produits exclus (apparaît dès que le calcul est terminé)
+    with col3:
+        if st.session_state.get("calcul_done") and "exclusion_reasons_df" in st.session_state:
+            st.download_button("Télécharger les produits exclus",
+                               data=st.session_state["exclusion_reasons_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
+                               file_name="produits_exclus.csv")
 
 # --- Bouton pour lancer le calcul ---
 if st.button("Démarrer le calcul"):
@@ -74,12 +104,10 @@ if st.button("Démarrer le calcul"):
             st.error("Veuillez spécifier les dates et heures de début et de fin.")
             update_status("Erreur : Dates ou heures manquantes.")
         else:
-            # 1. Chargement des données produit
             update_status("Chargement des données produit...")
             data = pd.read_excel(produit_file, sheet_name='Worksheet')
             update_status(f"Nombre de produits chargés : {len(data)}")
             
-            # 2. Traitement des exclusions issues du fichier exclus.xlsx
             update_status("Chargement des exclusions depuis exclus.xlsx...")
             exclusions_data = pd.ExcelFile(exclusion_file)
             excl_code_agz = exclusions_data.parse('Code AGZ')['Code AGZ'].dropna().astype(str).tolist()
@@ -93,7 +121,7 @@ if st.button("Démarrer le calcul"):
             data.loc[data['Fournisseur : identifiant'].isin(excl_fournisseur), 'Exclusion Reason'] = 'Exclus car présent dans Fournisseur fichier exclus'
             data.loc[data['Marque : identifiant'].isin(excl_marque), 'Exclusion Reason'] = 'Exclus car présent dans Marque fichier exclus'
             
-            # Vérification par combinaison fournisseur-famille
+            # Vérification par la combinaison fournisseur-famille
             data_merged = data.merge(
                 excl_fournisseur_famille,
                 how='left',
@@ -103,9 +131,9 @@ if st.button("Démarrer le calcul"):
             )
             data_merged.loc[data_merged['_merge'] == 'both', 'Exclusion Reason'] = 'Exclus car présent dans Fournisseur famille du fichier exclus'
             
-            # Séparer les produits exclus par le fichier exclus.xlsx
+            # Séparation des produits exclus via le fichier exclus.xlsx
             data_excluded = data_merged[data_merged['Exclusion Reason'].notna()].copy()
-            # Les produits non exclus par le fichier exclus seront traités pour le calcul
+            # Les produits non exclus seront traités pour le calcul
             data_processed = data_merged[data_merged['Exclusion Reason'].isna()].copy()
             data_processed = data_processed.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
             data_excluded = data_excluded.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
@@ -113,17 +141,14 @@ if st.button("Démarrer le calcul"):
             update_status(f"Produits exclus via exclus.xlsx : {len(data_excluded)}")
             update_status(f"Produits restants après exclusions : {len(data_processed)}")
             
-            # 3. Chargement des remises
             update_status("Chargement des remises...")
             remises = pd.read_excel(remise_file)
             price_column = "Prix d'achat avec option" if price_option == "Prix d'achat avec option" else "Prix de revient"
             
-            # 4. Calcul des prix promo sur les produits non exclus
             update_status("Calcul des prix promo...")
             result = []
             margin_issues = []
-            exclusion_reasons_from_calc = []  # exclusions dues au calcul de prix promo
-            
+            exclusion_reasons_from_calc = []
             for _, row in data_processed.iterrows():
                 prix_vente = row['Prix de vente en cours']
                 prix_base = row[price_column]
@@ -134,12 +159,10 @@ if st.button("Démarrer le calcul"):
                 for _, remise_row in remises.iterrows():
                     if remise_row['Marge minimale'] <= marge <= remise_row['Marge maximale']:
                         remise_appliquee = remise_row['Remise'] / 100
-                        remise_raison = (f"Remise appliquée : {remise_row['Remise']}% "
-                                         f"(Marge entre {remise_row['Marge minimale']}% et {remise_row['Marge maximale']}%)")
+                        remise_raison = f"Remise appliquée : {remise_row['Remise']}% (Marge entre {remise_row['Marge minimale']}% et {remise_row['Marge maximale']}%)"
                         break
                 prix_promo = round(prix_vente * (1 - remise_appliquee), 2)
                 taux_marge_promo = round((prix_promo - prix_base) / prix_promo * 100, 2)
-                
                 if prix_vente != prix_promo and pd.notna(taux_marge_promo):
                     result.append({
                         'Identifiant produit': row['Identifiant produit'],
@@ -167,8 +190,7 @@ if st.button("Démarrer le calcul"):
                         'Raison de la remise': remise_raison
                     })
             
-            # 5. Préparation du fichier des produits exclus
-            # Extraire les colonnes d'intérêt pour les produits exclus via le fichier exclus.xlsx
+            # Préparation du DataFrame des produits exclus
             if not data_excluded.empty:
                 excluded_from_exclus = data_excluded[['Code produit', 'Prix de vente en cours', 
                                                       "Prix d'achat avec option", "Prix de revient", "Exclusion Reason"]].copy()
@@ -180,8 +202,6 @@ if st.button("Démarrer le calcul"):
                                                              "Prix d'achat avec option", "Prix de revient", "Remise appliquée", "Raison de la remise"])
             
             exclusion_from_calc_df = pd.DataFrame(exclusion_reasons_from_calc)
-            
-            # Concaténer les deux sources d'exclusion
             exclusion_final_df = pd.concat([excluded_from_exclus, exclusion_from_calc_df], ignore_index=True)
             
             # Stockage des résultats dans le session_state
@@ -195,14 +215,11 @@ if st.button("Démarrer le calcul"):
         st.error(f"Une erreur est survenue : {e}")
         update_status(f"Erreur : {e}")
 
-# --- Affichage des boutons de téléchargement (ils restent affichés) ---
+# --- Boutons de téléchargement supplémentaires (après calcul) ---
 if st.session_state.get("calcul_done"):
     st.download_button("Télécharger les résultats",
-                       data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding='utf-8'),
+                       data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8"),
                        file_name="prix_promo_output.csv")
     st.download_button("Télécharger les produits avec problèmes de marge",
-                       data=st.session_state["margin_issues_df"].to_csv(index=False, sep=';', encoding='utf-8-sig'),
+                       data=st.session_state["margin_issues_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
                        file_name="produits_avec_problemes_de_marge.csv")
-    st.download_button("Télécharger les produits exclus",
-                       data=st.session_state["exclusion_reasons_df"].to_csv(index=False, sep=';', encoding='utf-8-sig'),
-                       file_name="produits_exclus.csv")
