@@ -31,9 +31,9 @@ remise_file = load_file("remise")
 # Date selection
 st.subheader("Sélection des dates")
 start_date = st.date_input("Date de début", value=datetime.now().date())
-start_time = st.time_input("Heure de début", value=datetime.now().time())
+start_time = st.time_input("Heure de début", value=time(0, 0))  # Default to midnight
 end_date = st.date_input("Date de fin", value=datetime.now().date())
-end_time = st.time_input("Heure de fin", value=datetime.now().time())
+end_time = st.time_input("Heure de fin", value=time(23, 59))  # Default to end of day
 
 # Combine date and time into datetime objects
 start_datetime = datetime.combine(start_date, start_time)
