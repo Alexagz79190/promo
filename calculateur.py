@@ -60,8 +60,7 @@ if st.button("Exporter les champs nécessaires"):
     update_status("Champs nécessaires exportés avec succès.")
 
 # Display log
-if "log_display" in st.session_state:
-    st.text_area("Journal des actions", value=st.session_state["log_display"], height=200, disabled=True)
+st.text_area("Journal des actions", value=st.session_state.get("log_display", ""), height=200, disabled=True)
 
 # Process data
 if st.button("Démarrer le calcul"):
@@ -132,12 +131,14 @@ if st.button("Démarrer le calcul"):
                 prix_base = row[price_column]
                 marge = (prix_vente - prix_base) / prix_vente * 100
                 marge = round(marge, 2)
-                remise = 0
+                remise_appliquee = 0
+                remise_raison = ""
                 for _, remise_row in remises.iterrows():
                     if remise_row['Marge minimale'] <= marge <= remise_row['Marge maximale']:
-                        remise = remise_row['Remise'] / 100
+                        remise_appliquee = remise_row['Remise'] / 100
+                        remise_raison = f"Remise appliquée : {remise_row['Remise']}% (Marge entre {remise_row['Marge minimale']}% et {remise_row['Marge maximale']}%)"
                         break
-                prix_promo = round(prix_vente * (1 - remise), 2)
+                prix_promo = round(prix_vente * (1 - remise_appliquee), 2)
                 taux_marge_promo = round((prix_promo - prix_base) / prix_promo * 100, 2)
 
                 # Skip if prix_vente equals prix_promo
@@ -166,7 +167,8 @@ if st.button("Démarrer le calcul"):
                         'Prix de vente en cours': prix_vente,
                         'Prix d\'achat avec option': row['Prix d\'achat avec option'],
                         'Prix de revient': row['Prix de revient'],
-                        'Remise appliquée': remise * 100
+                        'Remise appliquée': remise_appliquee * 100,
+                        'Raison de la remise': remise_raison
                     })
 
             # Export main results
