@@ -6,7 +6,7 @@ from datetime import datetime, time
 
 # Helper function to load files
 def load_file(file_type):
-    uploaded_file = st.file_uploader(f"Charger le fichier {file_type} (format Excel)", type=["xlsx"])
+    uploaded_file = st.file_uploader(f"Charger le fichier {file_type} (format Excel)", type=["xlsx"], key=file_type)
     return uploaded_file
 
 # Helper function to update status
@@ -14,7 +14,7 @@ def update_status(message):
     if "log" not in st.session_state:
         st.session_state["log"] = []
     st.session_state["log"].append(f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - {message}")
-    st.text_area("Journal des actions", value="\n".join(st.session_state["log"]), height=200, disabled=True)
+    st.session_state["log_display"] = "\n".join(st.session_state["log"])
 
 # Main Streamlit App
 st.title("Calculateur de Prix Promo")
@@ -58,6 +58,10 @@ if st.button("Exporter les champs nécessaires"):
                        data="\n".join(fields).encode("utf-8"),
                        file_name="champs_export_produit.txt")
     update_status("Champs nécessaires exportés avec succès.")
+
+# Display log
+if "log_display" in st.session_state:
+    st.text_area("Journal des actions", value=st.session_state["log_display"], height=200, disabled=True)
 
 # Process data
 if st.button("Démarrer le calcul"):
