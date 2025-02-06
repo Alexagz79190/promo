@@ -11,12 +11,10 @@ def load_file(file_type):
 
 # Helper function to update status
 def update_status(message):
+    if "log" not in st.session_state:
+        st.session_state["log"] = []
     st.session_state["log"].append(message)
     st.text_area("Journal des actions", value="\n".join(st.session_state["log"]), height=200, disabled=True)
-
-# Initialize session state for logs
-if "log" not in st.session_state:
-    st.session_state["log"] = []
 
 # Main Streamlit App
 st.title("Calculateur de Prix Promo")
@@ -160,7 +158,11 @@ if st.button("Démarrer le calcul"):
                 else:
                     exclusion_reasons.append({
                         'Code produit': row['Code produit'],
-                        'Raison exclusion': 'Exclus car le prix promo est supérieur ou égal au prix de vente'
+                        'Raison exclusion': 'Exclus car le prix promo est supérieur ou égal au prix de vente',
+                        'Prix de vente en cours': prix_vente,
+                        'Prix d\'achat avec option': row['Prix d\'achat avec option'],
+                        'Prix de revient': row['Prix de revient'],
+                        'Remise appliquée': remise * 100
                     })
 
             # Export main results
