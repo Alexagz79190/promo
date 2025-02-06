@@ -34,7 +34,7 @@ end_date = st.text_input("Date de fin (dd/mm/yyyy hh:mm:ss)")
 
 # Price type selection
 st.subheader("Options de calcul")
-price_option = st.radio("Choisissez les options de calcul :", 
+price_option = st.radio("Choisissez les options de calcul :",
                         options=["Prix d'achat avec option", "Prix de revient"])
 
 # Export necessary fields
@@ -49,8 +49,8 @@ if st.button("Exporter les champs nécessaires"):
         "Prix d'achat avec option",
         "Prix de revient"
     ]
-    st.download_button("Télécharger les champs nécessaires", 
-                       data="\n".join(fields).encode("utf-8"), 
+    st.download_button("Télécharger les champs nécessaires",
+                       data="\n".join(fields).encode("utf-8"),
                        file_name="champs_export_produit.txt")
     update_status("Champs nécessaires exportés avec succès.")
 
@@ -85,11 +85,14 @@ if st.button("Démarrer le calcul"):
                 columns=['Identifiant fournisseur', 'Identifiant famille']
             )
 
-            # Apply exclusions
+            # Apply exclusions and track reasons
             update_status("Application des exclusions...")
-            data = data[~data['Code produit'].astype(str).isin(excl_code_agz)]
-            data = data[~data['Fournisseur : identifiant'].isin(excl_fournisseur)]
-            data = data[~data['Marque : identifiant'].isin(excl_marque)]
+            exclusion_reasons = []
+
+            data['Exclusion Reason'] = None
+            data.loc[data['Code produit'].astype(str).isin(excl_code_agz), 'Exclusion Reason'] = 'Exclus car présent dans code AGZ fichier exclus'
+            data.loc[data['Fournisseur : identifiant'].isin(excl_fournisseur), 'Exclusion Reason'] = 'Exclus car présent dans Fournisseur fichier exclus'
+            data.loc[data['Marque : identifiant'].isin(excl_marque), 'Exclusion Reason'] = 'Exclus car présent dans Marque fichier exclus'
 
             data = data.merge(
                 fournisseur_famille_combinations,
@@ -98,6 +101,7 @@ if st.button("Démarrer le calcul"):
                 right_on=['Identifiant fournisseur', 'Identifiant famille'],
                 indicator=True
             )
+            data.loc[data['_merge'] == 'both', 'Exclusion Reason'] = 'Exclus car présent dans Fournisseur famille du fichier exclus'
             data = data[data['_merge'] == 'left_only']
             data = data.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
 
@@ -113,6 +117,7 @@ if st.button("Démarrer le calcul"):
             # Calculate promo prices
             update_status("Calcul des prix promo...")
             result = []
+            margin_issues = []
             for _, row in data.iterrows():
                 prix_vente = row['Prix de vente en cours']
                 prix_base = row[price_column]
@@ -125,7 +130,9 @@ if st.button("Démarrer le calcul"):
                         break
                 prix_promo = round(prix_vente * (1 - remise), 2)
                 taux_marge_promo = round((prix_promo - prix_base) / prix_promo * 100, 2)
-                if pd.notna(taux_marge_promo):
+
+                # Skip if prix_vente equals prix_promo
+                if prix_vente != prix_promo and pd.notna(taux_marge_promo):
                     result.append({
                         'Identifiant produit': row['Identifiant produit'],
                         'Prix promo HT': str(prix_promo).replace('.', ','),
@@ -134,11 +141,41 @@ if st.button("Démarrer le calcul"):
                         'Taux marge prix promo': str(taux_marge_promo).replace('.', ',')
                     })
 
+                    # Check for margin issues
+                    if taux_marge_promo < 5 or taux_marge_promo > 80:
+                        margin_issues.append({
+                            'Code produit': row['Code produit'],
+                            'Prix de vente en cours': prix_vente,
+                            'Prix d\'achat avec option': row['Prix d\'achat avec option'],
+                            'Prix de revient': row['Prix de revient'],
+                            'Prix promo calculé': prix_promo
+                        })
+                else:
+                    exclusion_reasons.append({
+                        'Code produit': row['Code produit'],
+                        'Raison exclusion': 'Exclus car le prix promo est supérieur ou égal au prix de vente'
+                    })
+
+            # Export main results
             result_df = pd.DataFrame(result)
-            st.download_button("Télécharger les résultats", 
-                               data=result_df.to_csv(index=False, sep=';', encoding='utf-8'), 
+            st.download_button("Télécharger les résultats",
+                               data=result_df.to_csv(index=False, sep=';', encoding='utf-8'),
                                file_name="prix_promo_output.csv")
             update_status("Calcul terminé. Fichier exporté avec succès.")
+
+            # Export margin issues
+            margin_issues_df = pd.DataFrame(margin_issues)
+            st.download_button("Télécharger les produits avec problèmes de marge",
+                               data=margin_issues_df.to_csv(index=False, sep=';', encoding='utf-8'),
+                               file_name="produits_avec_problemes_de_marge.csv")
+            update_status("Fichier des produits avec problèmes de marge exporté avec succès.")
+
+            # Export exclusion reasons
+            exclusion_reasons_df = pd.DataFrame(exclusion_reasons)
+            st.download_button("Télécharger les produits exclus",
+                               data=exclusion_reasons_df.to_csv(index=False, sep=';', encoding='utf-8'),
+                               file_name="produits_exclus.csv")
+            update_status("Fichier des produits exclus exporté avec succès.")
 
     except Exception as e:
         st.error(f"Une erreur est survenue : {e}")
