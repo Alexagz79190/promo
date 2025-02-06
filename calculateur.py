@@ -14,7 +14,7 @@ if "calcul_done" not in st.session_state:
 log_container = st.empty()
 
 def update_status(message):
-    """Ajoute un message au journal et met à jour le conteneur d'affichage."""
+    """Ajoute un message au journal et met à jour l'affichage."""
     st.session_state["log"].append(f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - {message}")
     st.session_state["log_display"] = "\n".join(st.session_state["log"])
     log_container.text_area("Journal des actions", st.session_state["log_display"], height=200, disabled=True)
@@ -34,10 +34,24 @@ st.subheader("Chargement des fichiers")
 # Upload du fichier export produit
 produit_file = load_file("export produit")
 
-# Affichage du bouton "Exporter les champs nécessaires" dès que le fichier export produit est chargé
+# Affichage des champs attendus (en dur) pour le fichier export produit
+st.info(
+    "Les champs attendus pour le fichier **export produit** sont :\n"
+    "- Identifiant produit\n"
+    "- Fournisseur : identifiant\n"
+    "- Famille : identifiant\n"
+    "- Marque : identifiant\n"
+    "- Code produit\n"
+    "- Prix de vente en cours\n"
+    "- Prix d'achat avec option\n"
+    "- Prix de revient"
+)
+
+# Dès que le fichier export produit est chargé, proposer le bouton "Exporter les champs nécessaires"
 if produit_file is not None:
-    st.write("Fichier export produit chargé.")
+    st.write("Fichier **export produit** chargé.")
     if st.button("Exporter les champs nécessaires"):
+        # Champs en dur
         fields = [
             "Identifiant produit",
             "Fournisseur : identifiant",
@@ -197,7 +211,7 @@ if st.button("Démarrer le calcul"):
 # --- Boutons de téléchargement (après calcul) ---
 if st.session_state.get("calcul_done"):
     st.download_button("Télécharger les résultats",
-                       data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8"),
+                       data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
                        file_name="prix_promo_output.csv")
     st.download_button("Télécharger les produits avec problèmes de marge",
                        data=st.session_state["margin_issues_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
