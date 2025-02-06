@@ -3,45 +3,50 @@ import streamlit as st
 from itertools import product
 from datetime import datetime, time
 
-# Helper function to load files
+# --- Initialisation du session_state pour le log et les résultats ---
+if "log" not in st.session_state:
+    st.session_state["log"] = []
+if "log_display" not in st.session_state:
+    st.session_state["log_display"] = ""
+if "calcul_done" not in st.session_state:
+    st.session_state["calcul_done"] = False
+
+# --- Fonction d'actualisation du log ---
+def update_status(message):
+    st.session_state["log"].append(f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - {message}")
+    st.session_state["log_display"] = "\n".join(st.session_state["log"])
+
+# --- Fonction pour charger un fichier ---
 def load_file(file_type):
     uploaded_file = st.file_uploader(f"Charger le fichier {file_type} (format Excel)", type=["xlsx"], key=file_type)
     return uploaded_file
 
-# Helper function to update status
-def update_status(message):
-    if "log" not in st.session_state:
-        st.session_state["log"] = []
-    st.session_state["log"].append(f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - {message}")
-    st.session_state["log_display"] = "\n".join(st.session_state["log"])
-
-# Main Streamlit App
+# --- Titre et sidebar ---
 st.title("Calculateur de Prix Promo")
 st.sidebar.header("Paramètres")
 
-# File upload section
+# --- Section de chargement des fichiers ---
 st.subheader("Chargement des fichiers")
 produit_file = load_file("export produit")
 exclusion_file = load_file("exclusion produit")
 remise_file = load_file("remise")
 
-# Date selection
+# --- Sélection des dates ---
 st.subheader("Sélection des dates")
 start_date = st.date_input("Date de début", value=datetime.now().date())
-start_time = st.time_input("Heure de début", value=time(0, 0))  # Default to midnight
+start_time = st.time_input("Heure de début", value=time(0, 0))  # par défaut minuit
 end_date = st.date_input("Date de fin", value=datetime.now().date())
-end_time = st.time_input("Heure de fin", value=time(23, 59))  # Default to end of day
+end_time = st.time_input("Heure de fin", value=time(23, 59))  # par défaut fin de journée
 
-# Combine date and time into datetime objects
 start_datetime = datetime.combine(start_date, start_time)
 end_datetime = datetime.combine(end_date, end_time)
 
-# Price type selection
+# --- Choix de l'option de calcul ---
 st.subheader("Options de calcul")
 price_option = st.radio("Choisissez les options de calcul :",
                         options=["Prix d'achat avec option", "Prix de revient"])
 
-# Export necessary fields
+# --- Export des champs nécessaires ---
 if st.button("Exporter les champs nécessaires"):
     fields = [
         "Identifiant produit",
@@ -53,29 +58,37 @@ if st.button("Exporter les champs nécessaires"):
         "Prix d'achat avec option",
         "Prix de revient"
     ]
-    st.download_button("Télécharger les champs nécessaires",
-                       data="\n".join(fields).encode("utf-8"),
-                       file_name="champs_export_produit.txt")
+    # On stocke le contenu à télécharger dans le session_state
+    st.session_state["export_fields"] = "\n".join(fields).encode("utf-8")
     update_status("Champs nécessaires exportés avec succès.")
 
-# Display log
-st.text_area("Journal des actions", value=st.session_state.get("log_display", ""), height=200, disabled=True)
+# Si le fichier d'export des champs est disponible, afficher le bouton de téléchargement
+if "export_fields" in st.session_state:
+    st.download_button("Télécharger les champs nécessaires",
+                       data=st.session_state["export_fields"],
+                       file_name="champs_export_produit.txt")
 
-# Process data
+# --- Affichage du journal d'actions ---
+# On utilise un conteneur pour permettre d'actualiser le log à chaque exécution
+log_container = st.empty()
+log_container.text_area("Journal des actions", value=st.session_state.get("log_display", ""), height=200, disabled=True)
+
+# --- Bouton pour lancer le calcul ---
 if st.button("Démarrer le calcul"):
     try:
         if not (produit_file and exclusion_file and remise_file):
             st.error("Veuillez charger tous les fichiers requis.")
             update_status("Erreur : Fichiers manquants.")
-        elif not start_datetime or not end_datetime:
+        elif not (start_datetime and end_datetime):
             st.error("Veuillez spécifier les dates et heures de début et de fin.")
             update_status("Erreur : Dates ou heures manquantes.")
         else:
-            # Load data
+            # Chargement des données produit
             update_status("Chargement des données produit...")
             data = pd.read_excel(produit_file, sheet_name='Worksheet')
             update_status(f"Nombre de produits chargés : {len(data)}")
 
+            # Chargement des exclusions
             update_status("Chargement des exclusions...")
             exclusions_data = pd.ExcelFile(exclusion_file)
             excl_code_agz = exclusions_data.parse('Code AGZ')['Code AGZ'].dropna().astype(str).tolist()
@@ -92,7 +105,7 @@ if st.button("Démarrer le calcul"):
                 columns=['Identifiant fournisseur', 'Identifiant famille']
             )
 
-            # Apply exclusions and track reasons
+            # Application des exclusions et traçage des raisons
             update_status("Application des exclusions...")
             exclusion_reasons = []
 
@@ -114,14 +127,14 @@ if st.button("Démarrer le calcul"):
 
             update_status(f"Produits restants après exclusions : {len(data)}")
 
-            # Load discounts
+            # Chargement des remises
             update_status("Chargement des remises...")
             remises = pd.read_excel(remise_file)
 
-            # Choose price type
+            # Choix de la colonne de prix en fonction de l'option choisie
             price_column = 'Prix d\'achat avec option' if price_option == "Prix d'achat avec option" else 'Prix de revient'
 
-            # Calculate promo prices
+            # Calcul des prix promo
             update_status("Calcul des prix promo...")
             result = []
             margin_issues = []
@@ -140,7 +153,7 @@ if st.button("Démarrer le calcul"):
                 prix_promo = round(prix_vente * (1 - remise_appliquee), 2)
                 taux_marge_promo = round((prix_promo - prix_base) / prix_promo * 100, 2)
 
-                # Skip if prix_vente equals prix_promo
+                # On ne prend en compte que les cas où le prix promo est différent du prix de vente
                 if prix_vente != prix_promo and pd.notna(taux_marge_promo):
                     result.append({
                         'Identifiant produit': row['Identifiant produit'],
@@ -150,7 +163,7 @@ if st.button("Démarrer le calcul"):
                         'Taux marge prix promo': str(taux_marge_promo).replace('.', ',')
                     })
 
-                    # Check for margin issues
+                    # Vérification des problèmes de marge
                     if taux_marge_promo < 5 or taux_marge_promo > 80:
                         margin_issues.append({
                             'Code produit': row['Code produit'],
@@ -170,27 +183,25 @@ if st.button("Démarrer le calcul"):
                         'Raison de la remise': remise_raison
                     })
 
-            # Export main results
-            result_df = pd.DataFrame(result)
-            st.download_button("Télécharger les résultats",
-                               data=result_df.to_csv(index=False, sep=';', encoding='utf-8'),
-                               file_name="prix_promo_output.csv")
-            update_status("Calcul terminé. Fichier exporté avec succès.")
+            # Stockage des résultats dans le session_state pour conserver l'affichage
+            st.session_state["result_df"] = pd.DataFrame(result)
+            st.session_state["margin_issues_df"] = pd.DataFrame(margin_issues)
+            st.session_state["exclusion_reasons_df"] = pd.DataFrame(exclusion_reasons)
+            st.session_state["calcul_done"] = True
 
-            # Export margin issues
-            margin_issues_df = pd.DataFrame(margin_issues)
-            st.download_button("Télécharger les produits avec problèmes de marge",
-                               data=margin_issues_df.to_csv(index=False, sep=';', encoding='utf-8'),
-                               file_name="produits_avec_problemes_de_marge.csv")
-            update_status("Fichier des produits avec problèmes de marge exporté avec succès.")
-
-            # Export exclusion reasons
-            exclusion_reasons_df = pd.DataFrame(exclusion_reasons)
-            st.download_button("Télécharger les produits exclus",
-                               data=exclusion_reasons_df.to_csv(index=False, sep=';', encoding='utf-8'),
-                               file_name="produits_exclus.csv")
-            update_status("Fichier des produits exclus exporté avec succès.")
-
+            update_status("Calcul terminé. Les fichiers de résultats sont prêts au téléchargement.")
     except Exception as e:
         st.error(f"Une erreur est survenue : {e}")
         update_status(f"Erreur : {e}")
+
+# --- Affichage des boutons de téléchargement (affichés tant que les résultats existent) ---
+if st.session_state.get("calcul_done"):
+    st.download_button("Télécharger les résultats",
+                       data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding='utf-8'),
+                       file_name="prix_promo_output.csv")
+    st.download_button("Télécharger les produits avec problèmes de marge",
+                       data=st.session_state["margin_issues_df"].to_csv(index=False, sep=';', encoding='latin-1'),
+                       file_name="produits_avec_problemes_de_marge.csv")
+    st.download_button("Télécharger les produits exclus",
+                       data=st.session_state["exclusion_reasons_df"].to_csv(index=False, sep=';', encoding='latin-1'),
+                       file_name="produits_exclus.csv")
