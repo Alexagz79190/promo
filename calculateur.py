@@ -13,7 +13,7 @@ def load_file(file_type):
 def update_status(message):
     if "log" not in st.session_state:
         st.session_state["log"] = []
-    st.session_state["log"].append(message)
+    st.session_state["log"].append(f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - {message}")
     st.text_area("Journal des actions", value="\n".join(st.session_state["log"]), height=200, disabled=True)
 
 # Main Streamlit App
