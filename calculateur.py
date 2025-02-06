@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 from itertools import product
-from datetime import datetime, time
-import time  # pour insérer des délais
+from datetime import datetime, time as dt_time  # Renommage pour éviter le conflit
+import time  # Module time pour time.sleep
 
 # --- Initialisation du session_state ---
 if "log" not in st.session_state:
@@ -38,12 +38,12 @@ produit_file = load_file("export produit")
 exclusion_file = load_file("exclusion produit")
 remise_file = load_file("remise")
 
-# --- Sélection des dates ---
+# Sélection des dates et heures
 st.subheader("Sélection des dates")
 start_date = st.date_input("Date de début", value=datetime.now().date())
-start_time = st.time_input("Heure de début", value=time(0, 0))
+start_time = st.time_input("Heure de début", value=dt_time(0, 0))  # Utilisation de dt_time
 end_date = st.date_input("Date de fin", value=datetime.now().date())
-end_time = st.time_input("Heure de fin", value=time(23, 59))
+end_time = st.time_input("Heure de fin", value=dt_time(23, 59))
 start_datetime = datetime.combine(start_date, start_time)
 end_datetime = datetime.combine(end_date, end_time)
 
