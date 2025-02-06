@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import streamlit as st
 from itertools import product
+from datetime import datetime
 
 # Helper function to load files
 def load_file(file_type):
@@ -29,8 +30,14 @@ remise_file = load_file("remise")
 
 # Date selection
 st.subheader("Sélection des dates")
-start_date = st.text_input("Date de début (dd/mm/yyyy hh:mm:ss)")
-end_date = st.text_input("Date de fin (dd/mm/yyyy hh:mm:ss)")
+start_date = st.date_input("Date de début", value=datetime.now().date())
+start_time = st.time_input("Heure de début", value=datetime.now().time())
+end_date = st.date_input("Date de fin", value=datetime.now().date())
+end_time = st.time_input("Heure de fin", value=datetime.now().time())
+
+# Combine date and time into datetime objects
+start_datetime = datetime.combine(start_date, start_time)
+end_datetime = datetime.combine(end_date, end_time)
 
 # Price type selection
 st.subheader("Options de calcul")
@@ -60,9 +67,9 @@ if st.button("Démarrer le calcul"):
         if not (produit_file and exclusion_file and remise_file):
             st.error("Veuillez charger tous les fichiers requis.")
             update_status("Erreur : Fichiers manquants.")
-        elif not start_date or not end_date:
-            st.error("Veuillez spécifier les dates de début et de fin.")
-            update_status("Erreur : Dates manquantes.")
+        elif not start_datetime or not end_datetime:
+            st.error("Veuillez spécifier les dates et heures de début et de fin.")
+            update_status("Erreur : Dates ou heures manquantes.")
         else:
             # Load data
             update_status("Chargement des données produit...")
@@ -136,8 +143,8 @@ if st.button("Démarrer le calcul"):
                     result.append({
                         'Identifiant produit': row['Identifiant produit'],
                         'Prix promo HT': str(prix_promo).replace('.', ','),
-                        'Date de début prix promo': start_date,
-                        'Date de fin prix promo': end_date,
+                        'Date de début prix promo': start_datetime.strftime('%d/%m/%Y %H:%M:%S'),
+                        'Date de fin prix promo': end_datetime.strftime('%d/%m/%Y %H:%M:%S'),
                         'Taux marge prix promo': str(taux_marge_promo).replace('.', ',')
                     })
 
