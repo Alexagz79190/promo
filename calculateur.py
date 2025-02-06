@@ -1,8 +1,16 @@
 import pandas as pd
 import streamlit as st
 from itertools import product
-from datetime import datetime, time as dt_time  # on renomme pour éviter le conflit avec le module time
+from datetime import datetime, time as dt_time  # alias pour éviter le conflit avec le module time
 import time  # pour time.sleep
+from io import BytesIO  # pour convertir les DataFrames en fichier Excel en mémoire
+
+# --- Fonction pour convertir un DataFrame en fichier Excel (bytes) ---
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+    return output.getvalue()
 
 # --- Initialisation du session_state ---
 if "log" not in st.session_state:
@@ -187,12 +195,14 @@ if st.button("Démarrer le calcul"):
 
 # --- Boutons de téléchargement (après calcul) ---
 if st.session_state.get("calcul_done"):
+    # Le fichier des résultats reste au format CSV
     st.download_button("Télécharger les résultats",
-                       data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
+                       data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8"),
                        file_name="prix_promo_output.csv")
+    # Les fichiers des produits avec problèmes de marge et des produits exclus sont exportés en XLSX
     st.download_button("Télécharger les produits avec problèmes de marge",
-                       data=st.session_state["margin_issues_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
-                       file_name="produits_avec_problemes_de_marge.csv")
+                       data=to_excel(st.session_state["margin_issues_df"]),
+                       file_name="produits_avec_problemes_de_marge.xlsx")
     st.download_button("Télécharger les produits exclus",
-                       data=st.session_state["exclusion_reasons_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
-                       file_name="produits_exclus.csv")
+                       data=to_excel(st.session_state["exclusion_reasons_df"]),
+                       file_name="produits_exclus.xlsx")
