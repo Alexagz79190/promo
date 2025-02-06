@@ -47,29 +47,6 @@ st.info(
     "- Prix de revient"
 )
 
-# Dès que le fichier export produit est chargé, proposer le bouton "Exporter les champs nécessaires"
-if produit_file is not None:
-    st.write("Fichier **export produit** chargé.")
-    if st.button("Exporter les champs nécessaires"):
-        # Champs en dur
-        fields = [
-            "Identifiant produit",
-            "Fournisseur : identifiant",
-            "Famille : identifiant",
-            "Marque : identifiant",
-            "Code produit",
-            "Prix de vente en cours",
-            "Prix d'achat avec option",
-            "Prix de revient"
-        ]
-        st.session_state["export_fields"] = "\n".join(fields).encode("utf-8")
-        update_status("Champs nécessaires exportés avec succès.")
-    if "export_fields" in st.session_state:
-        st.download_button("Télécharger les champs nécessaires",
-                           data=st.session_state["export_fields"],
-                           file_name="champs_export_produit.txt",
-                           encoding="utf-8-sig")
-
 # Upload des autres fichiers
 exclusion_file = load_file("exclusion produit")
 remise_file = load_file("remise")
