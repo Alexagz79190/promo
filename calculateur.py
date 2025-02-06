@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 from itertools import product
-from datetime import datetime, time as dt_time  # utilisation d'un alias pour éviter le conflit avec le module time
+from datetime import datetime, time as dt_time  # on renomme pour éviter le conflit avec le module time
 import time  # pour time.sleep
 
 # --- Initialisation du session_state ---
@@ -10,7 +10,7 @@ if "log" not in st.session_state:
 if "calcul_done" not in st.session_state:
     st.session_state["calcul_done"] = False
 
-# --- Création d'un conteneur pour afficher le journal ---
+# --- Conteneur pour afficher le journal en direct ---
 log_container = st.empty()
 
 def update_status(message):
@@ -21,9 +21,8 @@ def update_status(message):
     time.sleep(0.1)
 
 def load_file(file_type):
-    """Fonction d'aide pour charger un fichier Excel."""
-    uploaded_file = st.file_uploader(f"Charger le fichier {file_type} (format Excel)", type=["xlsx"], key=file_type)
-    return uploaded_file
+    """Charge un fichier Excel et retourne l'objet uploader."""
+    return st.file_uploader(f"Charger le fichier {file_type} (format Excel)", type=["xlsx"], key=file_type)
 
 # --- Interface principale ---
 st.title("Calculateur de Prix Promo")
@@ -31,15 +30,35 @@ st.sidebar.header("Paramètres")
 
 # --- Section de chargement des fichiers ---
 st.subheader("Chargement des fichiers")
+
+# Upload du fichier export produit
 produit_file = load_file("export produit")
+
+# Affichage du bouton "Exporter les champs nécessaires" dès que le fichier export produit est chargé
+if produit_file is not None:
+    st.write("Fichier export produit chargé.")
+    if st.button("Exporter les champs nécessaires"):
+        fields = [
+            "Identifiant produit",
+            "Fournisseur : identifiant",
+            "Famille : identifiant",
+            "Marque : identifiant",
+            "Code produit",
+            "Prix de vente en cours",
+            "Prix d'achat avec option",
+            "Prix de revient"
+        ]
+        st.session_state["export_fields"] = "\n".join(fields).encode("utf-8")
+        update_status("Champs nécessaires exportés avec succès.")
+    if "export_fields" in st.session_state:
+        st.download_button("Télécharger les champs nécessaires",
+                           data=st.session_state["export_fields"],
+                           file_name="champs_export_produit.txt",
+                           encoding="utf-8-sig")
+
+# Upload des autres fichiers
 exclusion_file = load_file("exclusion produit")
 remise_file = load_file("remise")
-
-# Si un fichier produit est chargé, on enregistre son contenu pour permettre son téléchargement
-if produit_file is not None:
-    st.session_state["export_produit_data"] = produit_file.getvalue()
-else:
-    st.session_state["export_produit_data"] = None
 
 # --- Sélection des dates et heures ---
 st.subheader("Sélection des dates")
@@ -55,46 +74,7 @@ st.subheader("Options de calcul")
 price_option = st.radio("Choisissez les options de calcul :",
                         options=["Prix d'achat avec option", "Prix de revient"])
 
-# --- Boutons d'export regroupés dans un conteneur à 3 colonnes ---
-with st.container():
-    col1, col2, col3 = st.columns(3)
-    
-    # Colonne 1 : Téléchargement du fichier export produit (si chargé)
-    with col1:
-        if st.session_state["export_produit_data"] is not None:
-            st.download_button("Télécharger export produit",
-                               data=st.session_state["export_produit_data"],
-                               file_name="export_produit.xlsx")
-    
-    # Colonne 2 : Bouton pour générer et télécharger les champs nécessaires
-    with col2:
-        if st.button("Exporter les champs nécessaires"):
-            fields = [
-                "Identifiant produit",
-                "Fournisseur : identifiant",
-                "Famille : identifiant",
-                "Marque : identifiant",
-                "Code produit",
-                "Prix de vente en cours",
-                "Prix d'achat avec option",
-                "Prix de revient"
-            ]
-            st.session_state["export_fields"] = "\n".join(fields).encode("utf-8")
-            update_status("Champs nécessaires exportés avec succès.")
-        if "export_fields" in st.session_state:
-            st.download_button("Télécharger les champs nécessaires",
-                               data=st.session_state["export_fields"],
-                               file_name="champs_export_produit.txt",
-                               encoding="utf-8-sig")
-    
-    # Colonne 3 : Téléchargement des produits exclus (apparaît dès que le calcul est terminé)
-    with col3:
-        if st.session_state.get("calcul_done") and "exclusion_reasons_df" in st.session_state:
-            st.download_button("Télécharger les produits exclus",
-                               data=st.session_state["exclusion_reasons_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
-                               file_name="produits_exclus.csv")
-
-# --- Bouton pour lancer le calcul ---
+# --- Bouton pour démarrer le calcul ---
 if st.button("Démarrer le calcul"):
     try:
         if not (produit_file and exclusion_file and remise_file):
@@ -131,9 +111,8 @@ if st.button("Démarrer le calcul"):
             )
             data_merged.loc[data_merged['_merge'] == 'both', 'Exclusion Reason'] = 'Exclus car présent dans Fournisseur famille du fichier exclus'
             
-            # Séparation des produits exclus via le fichier exclus.xlsx
+            # Séparation des produits exclus via le fichier exclus.xlsx et des produits à traiter
             data_excluded = data_merged[data_merged['Exclusion Reason'].notna()].copy()
-            # Les produits non exclus seront traités pour le calcul
             data_processed = data_merged[data_merged['Exclusion Reason'].isna()].copy()
             data_processed = data_processed.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
             data_excluded = data_excluded.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
@@ -215,7 +194,7 @@ if st.button("Démarrer le calcul"):
         st.error(f"Une erreur est survenue : {e}")
         update_status(f"Erreur : {e}")
 
-# --- Boutons de téléchargement supplémentaires (après calcul) ---
+# --- Boutons de téléchargement (après calcul) ---
 if st.session_state.get("calcul_done"):
     st.download_button("Télécharger les résultats",
                        data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8"),
@@ -223,3 +202,6 @@ if st.session_state.get("calcul_done"):
     st.download_button("Télécharger les produits avec problèmes de marge",
                        data=st.session_state["margin_issues_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
                        file_name="produits_avec_problemes_de_marge.csv")
+    st.download_button("Télécharger les produits exclus",
+                       data=st.session_state["exclusion_reasons_df"].to_csv(index=False, sep=';', encoding="utf-8-sig"),
+                       file_name="produits_exclus.csv")
