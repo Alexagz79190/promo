@@ -1,5 +1,4 @@
 import pandas as pd
-import os
 import streamlit as st
 from itertools import product
 from datetime import datetime, time
@@ -7,7 +6,9 @@ from datetime import datetime, time
 # Helper function to load files
 def load_file(file_type):
     uploaded_file = st.file_uploader(f"Charger le fichier {file_type} (format Excel)", type=["xlsx"], key=file_type)
-    return uploaded_file
+    if uploaded_file:
+        st.session_state[file_type] = uploaded_file
+    return st.session_state.get(file_type)
 
 # Helper function to update status
 def update_status(message):
