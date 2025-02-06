@@ -201,8 +201,8 @@ if st.session_state.get("calcul_done"):
                        data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding='utf-8'),
                        file_name="prix_promo_output.csv")
     st.download_button("Télécharger les produits avec problèmes de marge",
-                       data=st.session_state["margin_issues_df"].to_csv(index=False, sep=';', encoding='utf-8', mode='r'),
+                       data=st.session_state["margin_issues_df"].to_csv(index=False, sep=';', encoding='cp1252'),
                        file_name="produits_avec_problemes_de_marge.csv")
     st.download_button("Télécharger les produits exclus",
-                       data=st.session_state["exclusion_reasons_df"].to_csv(index=False, sep=';', encoding='utf-8', mode='r'),
+                       data=st.session_state["exclusion_reasons_df"].to_csv(index=False, sep=';', encoding='cp1252'),
                        file_name="produits_exclus.csv")
