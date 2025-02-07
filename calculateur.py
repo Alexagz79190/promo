@@ -146,7 +146,9 @@ if st.button("Démarrer le calcul"):
                         remise_raison = f"Remise appliquée : {remise_row['Remise']}% (Marge entre {remise_row['Marge minimale']}% et {remise_row['Marge maximale']}%)"
                         break
                 prix_promo = round(prix_vente * (1 - remise_appliquee), 2)
-                taux_marge_promo = round((prix_promo - prix_base) / prix_promo * 100, 2)
+                # Utiliser toujours le "Prix d'achat avec option" pour le calcul du taux de marge promo
+                prix_base_for_margin = row["Prix d'achat avec option"]
+                taux_marge_promo = round((prix_promo - prix_base_for_margin) / prix_promo * 100, 2)
                 if prix_vente != prix_promo and pd.notna(taux_marge_promo):
                     result.append({
                         'Identifiant produit': row['Identifiant produit'],
