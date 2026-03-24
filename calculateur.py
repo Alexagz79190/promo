@@ -265,26 +265,35 @@ elif page == "📊 Analyse CA par Commercial":
         if df_filtre.empty:
             st.warning("Aucune commande ne correspond à la sélection.")
         else:
+            # ── Valeur marge par ligne (base du calcul pondéré) ──
+            df_filtre = df_filtre.copy()
+            df_filtre["valeur_marge"] = df_filtre["Prix produits (HT)"] * df_filtre["taux_marge"] / 100
+
             # ── Agrégation par Auteur ────────────────
             agg = (
                 df_filtre
                 .groupby("Auteur", as_index=False)
                 .agg(
-                    Nb_commandes        = ("Reference",         "count"),
-                    CA_produits_HT      = ("Prix produits (HT)", "sum"),
-                    CA_final_HT         = ("Prix final (HT)",    "sum"),
-                    Taux_marge_moyen    = ("taux_marge",         "mean"),
+                    Nb_commandes   = ("Reference",          "count"),
+                    CA_produits_HT = ("Prix produits (HT)", "sum"),
+                    CA_final_HT    = ("Prix final (HT)",    "sum"),
+                    _val_marge     = ("valeur_marge",       "sum"),
                 )
                 .sort_values("CA_final_HT", ascending=False)
             )
+            # Taux pondéré : Σ(prix_produit × taux) / Σ(prix_produit) × 100
+            agg["Taux_marge_moyen"] = agg["_val_marge"] / agg["CA_produits_HT"] * 100
+            agg = agg.drop(columns=["_val_marge"])
 
             # ── Ligne TOTAL ──────────────────────────
+            total_ca_ht    = df_filtre["Prix produits (HT)"].sum()
+            total_val_marge = df_filtre["valeur_marge"].sum()
             total = pd.DataFrame([{
-                "Auteur":            "**TOTAL**",
-                "Nb_commandes":      agg["Nb_commandes"].sum(),
-                "CA_produits_HT":    agg["CA_produits_HT"].sum(),
-                "CA_final_HT":       agg["CA_final_HT"].sum(),
-                "Taux_marge_moyen":  df_filtre["taux_marge"].mean(),
+                "Auteur":           "**TOTAL**",
+                "Nb_commandes":     agg["Nb_commandes"].sum(),
+                "CA_produits_HT":   agg["CA_produits_HT"].sum(),
+                "CA_final_HT":      agg["CA_final_HT"].sum(),
+                "Taux_marge_moyen": total_val_marge / total_ca_ht * 100 if total_ca_ht else 0,
             }])
             agg_display = pd.concat([agg, total], ignore_index=True)
 
@@ -301,9 +310,9 @@ elif page == "📊 Analyse CA par Commercial":
                 except Exception:
                     return v
 
-            agg_display["CA_produits_HT"]   = agg_display["CA_produits_HT"].apply(fmt_eur)
-            agg_display["CA_final_HT"]       = agg_display["CA_final_HT"].apply(fmt_eur)
-            agg_display["Taux_marge_moyen"]  = agg_display["Taux_marge_moyen"].apply(fmt_pct)
+            agg_display["CA_produits_HT"]  = agg_display["CA_produits_HT"].apply(fmt_eur)
+            agg_display["CA_final_HT"]     = agg_display["CA_final_HT"].apply(fmt_eur)
+            agg_display["Taux_marge_moyen"] = agg_display["Taux_marge_moyen"].apply(fmt_pct)
 
             agg_display = agg_display.rename(columns={
                 "Auteur":           "Commercial",
@@ -320,24 +329,13 @@ elif page == "📊 Analyse CA par Commercial":
             # ── Métriques rapides ────────────────────
             st.subheader("Indicateurs globaux")
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Nb commandes",      f"{df_filtre['Reference'].count():,}".replace(",", " "))
-            m2.metric("CA Produits HT",    fmt_eur(df_filtre["Prix produits (HT)"].sum()))
-            m3.metric("CA Final HT",       fmt_eur(df_filtre["Prix final (HT)"].sum()))
-            m4.metric("Taux marge moyen",  fmt_pct(df_filtre["taux_marge"].mean()))
+            m1.metric("Nb commandes",     f"{df_filtre['Reference'].count():,}".replace(",", " "))
+            m2.metric("CA Produits HT",   fmt_eur(total_ca_ht))
+            m3.metric("CA Final HT",      fmt_eur(df_filtre["Prix final (HT)"].sum()))
+            m4.metric("Taux marge moyen", fmt_pct(total_val_marge / total_ca_ht * 100 if total_ca_ht else 0))
 
             # ── Export ───────────────────────────────
-            # On re-calcule un df propre pour l'export (sans formatage)
-            agg_export = (
-                df_filtre
-                .groupby("Auteur", as_index=False)
-                .agg(
-                    Nb_commandes        = ("Reference",          "count"),
-                    CA_produits_HT      = ("Prix produits (HT)", "sum"),
-                    CA_final_HT         = ("Prix final (HT)",    "sum"),
-                    Taux_marge_moyen    = ("taux_marge",         "mean"),
-                )
-                .sort_values("CA_final_HT", ascending=False)
-            )
+            agg_export = agg.copy()   # déjà calculé avec taux pondéré, sans colonne formatée
             col_dl1, col_dl2 = st.columns(2)
             with col_dl1:
                 st.download_button(
@@ -348,7 +346,8 @@ elif page == "📊 Analyse CA par Commercial":
                 )
             with col_dl2:
                 detail_export = df_filtre[["Reference", "Auteur", "Etat",
-                                           "Prix produits (HT)", "Prix final (HT)", "taux_marge"]].copy()
+                                           "Prix produits (HT)", "Prix final (HT)",
+                                           "taux_marge", "valeur_marge"]].copy()
                 st.download_button(
                     "⬇️ Télécharger le détail des commandes (Excel)",
                     data=to_excel(detail_export),
