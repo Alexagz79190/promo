@@ -243,22 +243,22 @@ elif page == "📊 Analyse CA par Commercial":
             auteurs_sel = st.multiselect(
                 "Auteur(s)",
                 options=auteurs_dispo,
-                default=auteurs_dispo,
+                default=[],
                 placeholder="Sélectionner des commerciaux…"
             )
         with col2:
+            etats_preselectes = [e for e in ["en_preparation", "expedie", "valide"] if e in etats_dispo]
             etats_sel = st.multiselect(
                 "État(s)",
                 options=etats_dispo,
-                default=etats_dispo,
+                default=etats_preselectes,
                 placeholder="Sélectionner des états…"
             )
 
         # ── Filtrage ─────────────────────────────────
-        df_filtre = df[
-            df["Auteur"].isin(auteurs_sel) &
-            df["Etat"].isin(etats_sel)
-        ].copy()
+        masque_auteur = df["Auteur"].isin(auteurs_sel) if auteurs_sel else pd.Series([True] * len(df), index=df.index)
+        masque_etat   = df["Etat"].isin(etats_sel)    if etats_sel   else pd.Series([True] * len(df), index=df.index)
+        df_filtre = df[masque_auteur & masque_etat].copy()
 
         st.markdown(f"**{len(df_filtre):,} commandes** correspondent aux filtres sélectionnés.")
 
@@ -338,12 +338,23 @@ elif page == "📊 Analyse CA par Commercial":
                 )
                 .sort_values("CA_final_HT", ascending=False)
             )
-            st.download_button(
-                "⬇️ Télécharger le récapitulatif (Excel)",
-                data=to_excel(agg_export),
-                file_name="ca_par_commercial.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            col_dl1, col_dl2 = st.columns(2)
+            with col_dl1:
+                st.download_button(
+                    "⬇️ Télécharger le récapitulatif (Excel)",
+                    data=to_excel(agg_export),
+                    file_name="ca_par_commercial.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            with col_dl2:
+                detail_export = df_filtre[["Reference", "Auteur", "Etat",
+                                           "Prix produits (HT)", "Prix final (HT)", "taux_marge"]].copy()
+                st.download_button(
+                    "⬇️ Télécharger le détail des commandes (Excel)",
+                    data=to_excel(detail_export),
+                    file_name="detail_commandes.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
     else:
         st.info("👆 Chargez un fichier CSV pour démarrer l'analyse.")
         st.markdown(
