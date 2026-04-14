@@ -223,6 +223,9 @@ elif page == "📊 Analyse CA par Commercial":
         # Chargement du CSV
         df = pd.read_csv(csv_file)
 
+        # Suppression du préfixe "Commande - " si présent dans les en-têtes
+        df.columns = [c.replace("Commande - ", "").strip() for c in df.columns]
+
         # Nettoyage : colonnes numériques
         df["Prix produits (HT)"] = pd.to_numeric(df["Prix produits (HT)"], errors="coerce")
         df["Prix final (HT)"]    = pd.to_numeric(df["Prix final (HT)"],    errors="coerce")
@@ -287,15 +290,15 @@ elif page == "📊 Analyse CA par Commercial":
             agg = agg.drop(columns=["_val_marge"])
 
             # ── Ligne TOTAL ──────────────────────────
-            total_ca_ht    = df_filtre["Prix produits (HT)"].sum()
+            total_ca_ht     = df_filtre["Prix produits (HT)"].sum()
             total_val_marge = df_filtre["valeur_marge"].sum()
             total = pd.DataFrame([{
-                "Auteur":              "**TOTAL**",
-                "Nb_commandes":        agg["Nb_commandes"].sum(),
-                "CA_produits_HT":      agg["CA_produits_HT"].sum(),
-                "CA_final_HT":         agg["CA_final_HT"].sum(),
-                "Taux_marge_simple":   df_filtre["taux_marge"].mean(),
-                "Taux_marge_pondere":  total_val_marge / total_ca_ht * 100 if total_ca_ht else 0,
+                "Auteur":             "**TOTAL**",
+                "Nb_commandes":       agg["Nb_commandes"].sum(),
+                "CA_produits_HT":     agg["CA_produits_HT"].sum(),
+                "CA_final_HT":        agg["CA_final_HT"].sum(),
+                "Taux_marge_simple":  df_filtre["taux_marge"].mean(),
+                "Taux_marge_pondere": total_val_marge / total_ca_ht * 100 if total_ca_ht else 0,
             }])
             agg_display = pd.concat([agg, total], ignore_index=True)
 
@@ -312,10 +315,10 @@ elif page == "📊 Analyse CA par Commercial":
                 except Exception:
                     return v
 
-            agg_display["CA_produits_HT"]     = agg_display["CA_produits_HT"].apply(fmt_eur)
-            agg_display["CA_final_HT"]         = agg_display["CA_final_HT"].apply(fmt_eur)
-            agg_display["Taux_marge_simple"]   = agg_display["Taux_marge_simple"].apply(fmt_pct)
-            agg_display["Taux_marge_pondere"]  = agg_display["Taux_marge_pondere"].apply(fmt_pct)
+            agg_display["CA_produits_HT"]    = agg_display["CA_produits_HT"].apply(fmt_eur)
+            agg_display["CA_final_HT"]        = agg_display["CA_final_HT"].apply(fmt_eur)
+            agg_display["Taux_marge_simple"]  = agg_display["Taux_marge_simple"].apply(fmt_pct)
+            agg_display["Taux_marge_pondere"] = agg_display["Taux_marge_pondere"].apply(fmt_pct)
 
             agg_display = agg_display.rename(columns={
                 "Auteur":             "Commercial",
@@ -340,7 +343,7 @@ elif page == "📊 Analyse CA par Commercial":
             m5.metric("Taux marge pondéré", fmt_pct(total_val_marge / total_ca_ht * 100 if total_ca_ht else 0))
 
             # ── Export ───────────────────────────────
-            agg_export = agg.copy()   # déjà calculé avec taux pondéré, sans colonne formatée
+            agg_export = agg.copy()
             col_dl1, col_dl2 = st.columns(2)
             with col_dl1:
                 st.download_button(
