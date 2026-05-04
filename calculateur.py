@@ -234,11 +234,12 @@ if page == "📦 Calculateur Prix Promo":
 
                     if prix_vente != prix_promo and pd.notna(taux_marge_promo):
                         result.append({
-                            COL_OFFRE_ID:            row[COL_OFFRE_ID],
-                            'Type de prix':          'promo',
-                            'Prix promo (centimes)': prix_promo_cents,
-                            'Date de début':         start_datetime.strftime('%d/%m/%Y %H:%M:%S'),
-                            'Date de fin':           end_datetime.strftime('%d/%m/%Y %H:%M:%S'),
+                            'Offre produit (cocher EST identifiant)': row[COL_OFFRE_ID],
+                            'Type':                   'promo',
+                            'Prix':                   prix_promo_cents,
+                            "Date d'application":     start_datetime.strftime('%d/%m/%Y %H:%M:%S'),
+                            'Date fin (pour promo uniquement)': end_datetime.strftime('%d/%m/%Y %H:%M:%S'),
+                            'Prix (ne pas importer)': f"{prix_promo:.2f}",
                         })
                         if taux_marge_promo < 5 or taux_marge_promo > 80:
                             margin_issues.append({
