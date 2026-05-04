@@ -15,6 +15,18 @@ def to_excel(df):
     return output.getvalue()
 
 # ─────────────────────────────────────────────
+# Mapping des colonnes du CSV produit
+# ─────────────────────────────────────────────
+COL_CODE        = "Code / Référence Produit"
+COL_PIM_PRODUIT = "pim_key Produit"
+COL_PIM_FAMILLE = "pim_key Famille Produit - Famille"
+COL_PIM_MARQUE  = "pim_key Marque Produit - Marque"
+COL_PIM_FOURN   = "pim_key Fournisseur produit - Fournisseur"
+COL_PRIX_VENTE  = "Prix de vente HT OffreProduit - offres"
+COL_PRIX_ACHAT  = "Prix d'achat HT OffreProduit - offres"
+COL_OFFRE_ID    = "Id OffreProduit - offres"
+
+# ─────────────────────────────────────────────
 # NAVIGATION
 # ─────────────────────────────────────────────
 st.sidebar.title("Navigation")
@@ -25,11 +37,10 @@ page = st.sidebar.radio(
 )
 
 # ══════════════════════════════════════════════
-# PAGE 1 — CALCULATEUR PRIX PROMO (code original)
+# PAGE 1 — CALCULATEUR PRIX PROMO
 # ══════════════════════════════════════════════
 if page == "📦 Calculateur Prix Promo":
 
-    # --- Initialisation du session_state ---
     if "log" not in st.session_state:
         st.session_state["log"] = []
     if "calcul_done" not in st.session_state:
@@ -43,41 +54,39 @@ if page == "📦 Calculateur Prix Promo":
         log_container.text_area("Journal des actions", st.session_state["log_display"], height=200, disabled=True)
         time.sleep(0.1)
 
-    def load_file(file_type):
-        return st.file_uploader(f"Charger le fichier {file_type} (format Excel)", type=["xlsx"], key=file_type)
-
     st.title("Calculateur de Prix Promo")
     st.sidebar.header("Paramètres")
 
     st.subheader("Chargement des fichiers")
-    produit_file = load_file("export produit")
+
+    produit_file = st.file_uploader("Charger le fichier export produit (format CSV)", type=["csv"], key="produit_csv")
     st.info(
-        "Les champs attendus pour le fichier **export produit** sont :\n"
-        "- Identifiant produit\n"
-        "- Fournisseur : identifiant\n"
-        "- Famille : identifiant\n"
-        "- Marque : identifiant\n"
-        "- Code produit\n"
-        "- Prix de vente en cours\n"
-        "- Prix d'achat avec option\n"
-        "- Prix de revient"
+        "Les champs attendus pour le fichier **export produit** (CSV) — l'ordre des colonnes n'est pas important :\n"
+        f"- `{COL_CODE}`\n"
+        f"- `{COL_PIM_PRODUIT}`\n"
+        f"- `{COL_PIM_FAMILLE}`\n"
+        f"- `{COL_PIM_MARQUE}`\n"
+        f"- `{COL_PIM_FOURN}`\n"
+        f"- `{COL_PRIX_VENTE}`\n"
+        f"- `{COL_PRIX_ACHAT}`\n"
+        f"- `{COL_OFFRE_ID}`"
     )
-    exclusion_file = load_file("exclusion produit")
-    remise_file = load_file("remise")
+
+    exclusion_file = st.file_uploader("Charger le fichier exclusion produit (format Excel)", type=["xlsx"], key="exclusion")
+    remise_file    = st.file_uploader("Charger le fichier remise (format Excel)",            type=["xlsx"], key="remise")
 
     st.subheader("Sélection des dates")
-    start_date = st.date_input("Date de début", value=datetime.now().date())
-    start_time = st.time_input("Heure de début", value=dt_time(0, 0))
-    end_date = st.date_input("Date de fin", value=datetime.now().date())
-    end_time = st.time_input("Heure de fin", value=dt_time(23, 59))
+    start_date = st.date_input("Date de début",  value=datetime.now().date(), key="sd")
+    start_time = st.time_input("Heure de début", value=dt_time(0, 0),        key="st")
+    end_date   = st.date_input("Date de fin",    value=datetime.now().date(), key="ed")
+    end_time   = st.time_input("Heure de fin",   value=dt_time(23, 59),      key="et")
     start_datetime = datetime.combine(start_date, start_time)
-    end_datetime = datetime.combine(end_date, end_time)
-
-    st.subheader("Options de calcul")
-    price_option = st.radio("Choisissez les options de calcul :",
-                            options=["Prix d'achat avec option", "Prix de revient"])
+    end_datetime   = datetime.combine(end_date,   end_time)
 
     if st.button("Démarrer le calcul"):
+        st.session_state["log"] = []
+        st.session_state["calcul_done"] = False
+
         try:
             if not (produit_file and exclusion_file and remise_file):
                 st.error("Veuillez charger tous les fichiers requis.")
@@ -86,132 +95,230 @@ if page == "📦 Calculateur Prix Promo":
                 st.error("Veuillez spécifier les dates et heures de début et de fin.")
                 update_status("Erreur : Dates ou heures manquantes.")
             else:
-                update_status("Chargement des données produit...")
-                data = pd.read_excel(produit_file, sheet_name='Worksheet')
-                update_status(f"Nombre de produits chargés : {len(data)}")
+                # ── Chargement produits ───────────────────────────────────────
+                update_status("Chargement des données produit (CSV)...")
+                data = pd.read_csv(produit_file)
+                update_status(f"Nombre de lignes chargées : {len(data)}")
 
-                update_status("Chargement des exclusions depuis exclus.xlsx...")
+                # Vérification que toutes les colonnes attendues sont présentes
+                colonnes_requises = [COL_CODE, COL_PIM_PRODUIT, COL_PIM_FAMILLE,
+                                     COL_PIM_MARQUE, COL_PIM_FOURN,
+                                     COL_PRIX_VENTE, COL_PRIX_ACHAT, COL_OFFRE_ID]
+                colonnes_manquantes = [c for c in colonnes_requises if c not in data.columns]
+                if colonnes_manquantes:
+                    st.error(f"Colonnes manquantes dans le fichier produit : {colonnes_manquantes}")
+                    update_status(f"Erreur : colonnes manquantes : {colonnes_manquantes}")
+                    st.stop()
+
+                # ── Dédoublonnage multi-offres (valeurs séparées par |) ───────
+                # Certains produits ont plusieurs offres sur une seule ligne,
+                # ex : Prix de vente = "1.96|1.93", Id = "uuid1|uuid2"
+                # On éclate chaque colonne multi-valeurs en autant de lignes.
+                cols_a_eclater = [COL_PRIX_VENTE, COL_PRIX_ACHAT, COL_OFFRE_ID]
+                for col in cols_a_eclater:
+                    data[col] = data[col].astype(str).str.split('|')
+                avant_eclatement = len(data)
+                data = data.explode(cols_a_eclater).reset_index(drop=True)
+                if len(data) > avant_eclatement:
+                    update_status(
+                        f"Dédoublonnage multi-offres : {avant_eclatement} ligne(s) → "
+                        f"{len(data)} ligne(s) après éclatement."
+                    )
+                update_status(f"Nombre de produits/offres à traiter : {len(data)}")
+
+                # Nettoyage colonnes numériques (gestion virgule/point)
+                data[COL_PRIX_VENTE] = pd.to_numeric(
+                    data[COL_PRIX_VENTE].astype(str).str.replace(",", "."), errors="coerce")
+                data[COL_PRIX_ACHAT] = pd.to_numeric(
+                    data[COL_PRIX_ACHAT].astype(str).str.replace(",", "."), errors="coerce")
+
+                # Suppression des lignes sans prix valides
+                before = len(data)
+                data = data.dropna(subset=[COL_PRIX_VENTE, COL_PRIX_ACHAT])
+                if len(data) < before:
+                    update_status(f"{before - len(data)} ligne(s) ignorée(s) : prix manquants ou non numériques.")
+
+                # ── Chargement exclusions ─────────────────────────────────────
+                update_status("Chargement des exclusions...")
                 exclusions_data = pd.ExcelFile(exclusion_file)
-                excl_code_agz = exclusions_data.parse('Code AGZ')['Code AGZ'].dropna().astype(str).tolist()
-                excl_fournisseur = exclusions_data.parse('Founisseur ')['Identifiant fournisseur seul'].dropna().astype(int).tolist()
-                excl_marque = exclusions_data.parse('Marque')['Identifiant marque seul'].dropna().astype(int).tolist()
-                excl_fournisseur_famille = exclusions_data.parse('Fournisseur famille')[['Identifiant fournisseur', 'Identifiant famille']]
 
-                all_fournisseurs = excl_fournisseur_famille['Identifiant fournisseur'].unique()
-                all_familles = excl_fournisseur_famille['Identifiant famille'].unique()
-                all_combinations = list(product(all_fournisseurs, all_familles))
-                all_combinations_df = pd.DataFrame(all_combinations, columns=['Identifiant fournisseur', 'Identifiant famille'])
+                excl_code_agz = (exclusions_data.parse('Code AGZ')['Code AGZ']
+                                 .dropna().astype(str).tolist())
+                excl_fournisseur = (exclusions_data.parse('Founisseur ')['Identifiant fournisseur seul']
+                                    .dropna().astype(str).tolist())
+                excl_marque = (exclusions_data.parse('Marque')['Identifiant marque seul']
+                               .dropna().astype(str).tolist())
+                excl_ff = exclusions_data.parse('Fournisseur famille')[
+                    ['Identifiant fournisseur', 'Identifiant famille']
+                ].astype(str)
 
-                update_status("Application des exclusions issues du fichier exclus.xlsx...")
+                all_fournisseurs    = excl_ff['Identifiant fournisseur'].unique()
+                all_familles        = excl_ff['Identifiant famille'].unique()
+                all_combinations_df = pd.DataFrame(
+                    list(product(all_fournisseurs, all_familles)),
+                    columns=['Identifiant fournisseur', 'Identifiant famille']
+                )
+
+                # ── Application des exclusions ────────────────────────────────
+                update_status("Application des exclusions...")
+
+                data[COL_PIM_PRODUIT] = data[COL_PIM_PRODUIT].astype(str)
+                data[COL_PIM_FOURN]   = data[COL_PIM_FOURN].astype(str)
+                data[COL_PIM_MARQUE]  = data[COL_PIM_MARQUE].astype(str)
+                data[COL_PIM_FAMILLE] = data[COL_PIM_FAMILLE].astype(str)
+
                 data['Exclusion Reason'] = None
-                data.loc[data['Code produit'].astype(str).isin(excl_code_agz), 'Exclusion Reason'] = 'Exclus car présent dans Code AGZ fichier exclus'
-                data.loc[data['Fournisseur : identifiant'].isin(excl_fournisseur), 'Exclusion Reason'] = 'Exclus car présent dans Fournisseur fichier exclus'
-                data.loc[data['Marque : identifiant'].isin(excl_marque), 'Exclusion Reason'] = 'Exclus car présent dans Marque fichier exclus'
+                data.loc[data[COL_CODE].astype(str).isin(excl_code_agz),
+                         'Exclusion Reason'] = 'Exclus car présent dans Code AGZ fichier exclus'
+                data.loc[data[COL_PIM_FOURN].isin(excl_fournisseur),
+                         'Exclusion Reason'] = 'Exclus car présent dans Fournisseur fichier exclus'
+                data.loc[data[COL_PIM_MARQUE].isin(excl_marque),
+                         'Exclusion Reason'] = 'Exclus car présent dans Marque fichier exclus'
 
                 data_merged = data.merge(
                     all_combinations_df,
                     how='left',
-                    left_on=['Fournisseur : identifiant', 'Famille : identifiant'],
+                    left_on=[COL_PIM_FOURN, COL_PIM_FAMILLE],
                     right_on=['Identifiant fournisseur', 'Identifiant famille'],
                     indicator=True
                 )
-                data_merged.loc[data_merged['_merge'] == 'both', 'Exclusion Reason'] = 'Exclus car présent dans Fournisseur famille du fichier exclus'
+                data_merged.loc[data_merged['_merge'] == 'both', 'Exclusion Reason'] = (
+                    'Exclus car présent dans Fournisseur famille du fichier exclus'
+                )
 
-                data_excluded = data_merged[data_merged['Exclusion Reason'].notna()].copy()
+                data_excluded  = data_merged[data_merged['Exclusion Reason'].notna()].copy()
                 data_processed = data_merged[data_merged['Exclusion Reason'].isna()].copy()
                 data_processed = data_processed.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
-                data_excluded = data_excluded.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
+                data_excluded  = data_excluded.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
 
-                update_status(f"Produits exclus via exclus.xlsx : {len(data_excluded)}")
+                update_status(f"Produits exclus via fichier exclus : {len(data_excluded)}")
                 update_status(f"Produits restants après exclusions : {len(data_processed)}")
 
+                # ── Chargement remises ────────────────────────────────────────
                 update_status("Chargement des remises...")
                 remises = pd.read_excel(remise_file)
-                price_column = "Prix d'achat avec option" if price_option == "Prix d'achat avec option" else "Prix de revient"
 
+                # ── Calcul des prix promo ─────────────────────────────────────
                 update_status("Calcul des prix promo...")
-                result = []
-                margin_issues = []
+                result                      = []
+                margin_issues               = []
                 exclusion_reasons_from_calc = []
+
                 for _, row in data_processed.iterrows():
-                    prix_vente = row['Prix de vente en cours']
-                    prix_base = row[price_column]
-                    marge = (prix_vente - prix_base) / prix_vente * 100
-                    marge = round(marge, 2)
+                    prix_vente = row[COL_PRIX_VENTE]
+                    prix_achat = row[COL_PRIX_ACHAT]
+
+                    if pd.isna(prix_vente) or pd.isna(prix_achat) or prix_vente <= 0:
+                        continue
+
+                    marge = round((prix_vente - prix_achat) / prix_vente * 100, 2)
+
                     remise_appliquee = 0
-                    remise_raison = ""
+                    remise_raison    = ""
                     for _, remise_row in remises.iterrows():
                         if remise_row['Marge minimale'] <= marge <= remise_row['Marge maximale']:
                             remise_appliquee = remise_row['Remise'] / 100
-                            remise_raison = f"Remise appliquée : {remise_row['Remise']}% (Marge entre {remise_row['Marge minimale']}% et {remise_row['Marge maximale']}%)"
+                            remise_raison    = (
+                                f"Remise appliquée : {remise_row['Remise']}% "
+                                f"(Marge entre {remise_row['Marge minimale']}% et {remise_row['Marge maximale']}%)"
+                            )
                             break
-                    prix_promo = round(prix_vente * (1 - remise_appliquee), 2)
-                    prix_base_for_margin = row["Prix d'achat avec option"]
-                    taux_marge_promo = round((prix_promo - prix_base_for_margin) / prix_promo * 100, 2)
+
+                    prix_promo       = round(prix_vente * (1 - remise_appliquee), 2)
+                    prix_promo_cents = int(round(prix_promo * 100))
+                    taux_marge_promo = round((prix_promo - prix_achat) / prix_promo * 100, 2) if prix_promo > 0 else None
+
                     if prix_vente != prix_promo and pd.notna(taux_marge_promo):
                         result.append({
-                            'Identifiant produit': row['Identifiant produit'],
-                            'Prix promo HT': str(prix_promo).replace('.', ','),
-                            'Date de début prix promo': start_datetime.strftime('%d/%m/%Y %H:%M:%S'),
-                            'Date de fin prix promo': end_datetime.strftime('%d/%m/%Y %H:%M:%S'),
-                            'Taux marge prix promo': str(taux_marge_promo).replace('.', ',')
+                            COL_OFFRE_ID:            row[COL_OFFRE_ID],
+                            'Type de prix':          'promo',
+                            'Prix promo (centimes)': prix_promo_cents,
+                            'Date de début':         start_datetime.strftime('%d/%m/%Y %H:%M:%S'),
+                            'Date de fin':           end_datetime.strftime('%d/%m/%Y %H:%M:%S'),
                         })
                         if taux_marge_promo < 5 or taux_marge_promo > 80:
                             margin_issues.append({
-                                'Code produit': row['Code produit'],
-                                'Prix de vente en cours': prix_vente,
-                                "Prix d'achat avec option": row["Prix d'achat avec option"],
-                                'Prix de revient': row['Prix de revient'],
-                                'Prix promo calculé': prix_promo
+                                COL_CODE:                        row[COL_CODE],
+                                COL_OFFRE_ID:                    row[COL_OFFRE_ID],
+                                'Prix de vente HT':              prix_vente,
+                                "Prix d'achat HT":               prix_achat,
+                                'Prix promo calculé (HT)':       prix_promo,
+                                'Prix promo calculé (centimes)': prix_promo_cents,
+                                'Taux marge promo':              taux_marge_promo,
                             })
                     else:
                         exclusion_reasons_from_calc.append({
-                            'Code produit': row['Code produit'],
-                            'Raison exclusion': 'Exclus car le prix promo est supérieur ou égal au prix de vente',
-                            'Prix de vente en cours': prix_vente,
-                            "Prix d'achat avec option": row["Prix d'achat avec option"],
-                            'Prix de revient': row['Prix de revient'],
-                            'Remise appliquée': remise_appliquee * 100,
-                            'Raison de la remise': remise_raison
+                            COL_CODE:               row[COL_CODE],
+                            COL_OFFRE_ID:           row[COL_OFFRE_ID],
+                            'Raison exclusion':     'Exclus car le prix promo est supérieur ou égal au prix de vente',
+                            'Prix de vente HT':     prix_vente,
+                            "Prix d'achat HT":      prix_achat,
+                            'Remise appliquée (%)': remise_appliquee * 100,
+                            'Raison de la remise':  remise_raison,
                         })
 
+                # ── Construction du fichier exclus final ──────────────────────
                 if not data_excluded.empty:
-                    excluded_from_exclus = data_excluded[['Code produit', 'Prix de vente en cours',
-                                                          "Prix d'achat avec option", "Prix de revient", "Exclusion Reason"]].copy()
-                    excluded_from_exclus.rename(columns={"Exclusion Reason": "Raison exclusion"}, inplace=True)
-                    excluded_from_exclus["Remise appliquée"] = ""
-                    excluded_from_exclus["Raison de la remise"] = ""
+                    excluded_from_exclus = data_excluded[[
+                        COL_CODE, COL_OFFRE_ID, COL_PRIX_VENTE, COL_PRIX_ACHAT, 'Exclusion Reason'
+                    ]].copy()
+                    excluded_from_exclus.rename(columns={
+                        COL_PRIX_VENTE:     'Prix de vente HT',
+                        COL_PRIX_ACHAT:     "Prix d'achat HT",
+                        'Exclusion Reason': 'Raison exclusion'
+                    }, inplace=True)
+                    excluded_from_exclus['Remise appliquée (%)'] = ""
+                    excluded_from_exclus['Raison de la remise']  = ""
                 else:
-                    excluded_from_exclus = pd.DataFrame(columns=["Code produit", "Raison exclusion", "Prix de vente en cours",
-                                                                 "Prix d'achat avec option", "Prix de revient", "Remise appliquée", "Raison de la remise"])
+                    excluded_from_exclus = pd.DataFrame(columns=[
+                        COL_CODE, COL_OFFRE_ID,
+                        'Prix de vente HT', "Prix d'achat HT",
+                        'Raison exclusion', 'Remise appliquée (%)', 'Raison de la remise'
+                    ])
 
                 exclusion_from_calc_df = pd.DataFrame(exclusion_reasons_from_calc)
-                exclusion_final_df = pd.concat([excluded_from_exclus, exclusion_from_calc_df], ignore_index=True)
+                exclusion_final_df     = pd.concat([excluded_from_exclus, exclusion_from_calc_df], ignore_index=True)
 
-                st.session_state["result_df"] = pd.DataFrame(result)
-                st.session_state["margin_issues_df"] = pd.DataFrame(margin_issues)
+                st.session_state["result_df"]            = pd.DataFrame(result)
+                st.session_state["margin_issues_df"]     = pd.DataFrame(margin_issues)
                 st.session_state["exclusion_reasons_df"] = exclusion_final_df
-                st.session_state["calcul_done"] = True
+                st.session_state["calcul_done"]          = True
 
-                update_status("Calcul terminé. Les fichiers de résultats sont prêts au téléchargement.")
+                update_status(f"Calcul terminé — {len(result)} offres promo générées.")
+
         except Exception as e:
             st.error(f"Une erreur est survenue : {e}")
             update_status(f"Erreur : {e}")
 
     if st.session_state.get("calcul_done"):
-        st.download_button("Télécharger les résultats",
-                           data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8"),
-                           file_name="prix_promo_output.csv")
-        st.download_button("Télécharger les produits avec problèmes de marge",
-                           data=to_excel(st.session_state["margin_issues_df"]),
-                           file_name="produits_avec_problemes_de_marge.xlsx")
-        st.download_button("Télécharger les produits exclus",
-                           data=to_excel(st.session_state["exclusion_reasons_df"]),
-                           file_name="produits_exclus.xlsx")
+        st.success(f"✅ {len(st.session_state['result_df'])} offres promo prêtes.")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.download_button(
+                "⬇️ Télécharger les résultats (CSV)",
+                data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8"),
+                file_name="prix_promo_output.csv",
+                mime="text/csv"
+            )
+        with col2:
+            st.download_button(
+                "⬇️ Produits avec problèmes de marge (Excel)",
+                data=to_excel(st.session_state["margin_issues_df"]),
+                file_name="produits_avec_problemes_de_marge.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        with col3:
+            st.download_button(
+                "⬇️ Produits exclus (Excel)",
+                data=to_excel(st.session_state["exclusion_reasons_df"]),
+                file_name="produits_exclus.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 
 # ══════════════════════════════════════════════
-# PAGE 2 — ANALYSE CA PAR COMMERCIAL
+# PAGE 2 — ANALYSE CA PAR COMMERCIAL (inchangée)
 # ══════════════════════════════════════════════
 elif page == "📊 Analyse CA par Commercial":
 
@@ -220,22 +327,16 @@ elif page == "📊 Analyse CA par Commercial":
     csv_file = st.file_uploader("Charger le fichier export commandes (CSV)", type=["csv"], key="ca_csv")
 
     if csv_file is not None:
-        # Chargement du CSV
         df = pd.read_csv(csv_file)
-
-        # Suppression du préfixe "Commande - " si présent dans les en-têtes
         df.columns = [c.replace("Commande - ", "").strip() for c in df.columns]
 
-        # Nettoyage : colonnes numériques
         df["Prix produits (HT)"] = pd.to_numeric(df["Prix produits (HT)"], errors="coerce")
         df["Prix final (HT)"]    = pd.to_numeric(df["Prix final (HT)"],    errors="coerce")
         df["taux_marge"]         = pd.to_numeric(df["taux_marge"],         errors="coerce")
 
-        # Remplacement des Auteur vides par une étiquette lisible
         df["Auteur"] = df["Auteur"].fillna("(Sans commercial)").str.strip()
         df["Etat"]   = df["Etat"].fillna("(Inconnu)").str.strip()
 
-        # ── Filtres ──────────────────────────────────
         st.subheader("Filtres")
         col1, col2 = st.columns(2)
 
@@ -243,22 +344,13 @@ elif page == "📊 Analyse CA par Commercial":
         etats_dispo   = sorted(df["Etat"].unique().tolist())
 
         with col1:
-            auteurs_sel = st.multiselect(
-                "Auteur(s)",
-                options=auteurs_dispo,
-                default=[],
-                placeholder="Sélectionner des commerciaux…"
-            )
+            auteurs_sel = st.multiselect("Auteur(s)", options=auteurs_dispo, default=[],
+                                         placeholder="Sélectionner des commerciaux…")
         with col2:
             etats_preselectes = [e for e in ["en_preparation", "expedie", "valide"] if e in etats_dispo]
-            etats_sel = st.multiselect(
-                "État(s)",
-                options=etats_dispo,
-                default=etats_preselectes,
-                placeholder="Sélectionner des états…"
-            )
+            etats_sel = st.multiselect("État(s)", options=etats_dispo, default=etats_preselectes,
+                                       placeholder="Sélectionner des états…")
 
-        # ── Filtrage ─────────────────────────────────
         masque_auteur = df["Auteur"].isin(auteurs_sel) if auteurs_sel else pd.Series([True] * len(df), index=df.index)
         masque_etat   = df["Etat"].isin(etats_sel)    if etats_sel   else pd.Series([True] * len(df), index=df.index)
         df_filtre = df[masque_auteur & masque_etat].copy()
@@ -268,28 +360,23 @@ elif page == "📊 Analyse CA par Commercial":
         if df_filtre.empty:
             st.warning("Aucune commande ne correspond à la sélection.")
         else:
-            # ── Valeur marge par ligne (base du calcul pondéré) ──
-            df_filtre = df_filtre.copy()
             df_filtre["valeur_marge"] = df_filtre["Prix produits (HT)"] * df_filtre["taux_marge"] / 100
 
-            # ── Agrégation par Auteur ────────────────
             agg = (
                 df_filtre
                 .groupby("Auteur", as_index=False)
                 .agg(
-                    Nb_commandes       = ("Reference",          "count"),
-                    CA_produits_HT     = ("Prix produits (HT)", "sum"),
-                    CA_final_HT        = ("Prix final (HT)",    "sum"),
-                    _val_marge         = ("valeur_marge",       "sum"),
-                    Taux_marge_simple  = ("taux_marge",         "mean"),
+                    Nb_commandes      =("Reference",          "count"),
+                    CA_produits_HT    =("Prix produits (HT)", "sum"),
+                    CA_final_HT       =("Prix final (HT)",    "sum"),
+                    _val_marge        =("valeur_marge",       "sum"),
+                    Taux_marge_simple =("taux_marge",         "mean"),
                 )
                 .sort_values("CA_final_HT", ascending=False)
             )
-            # Taux pondéré : Σ(prix_produit × taux) / Σ(prix_produit) × 100
             agg["Taux_marge_pondere"] = agg["_val_marge"] / agg["CA_produits_HT"] * 100
             agg = agg.drop(columns=["_val_marge"])
 
-            # ── Ligne TOTAL ──────────────────────────
             total_ca_ht     = df_filtre["Prix produits (HT)"].sum()
             total_val_marge = df_filtre["valeur_marge"].sum()
             total = pd.DataFrame([{
@@ -302,20 +389,15 @@ elif page == "📊 Analyse CA par Commercial":
             }])
             agg_display = pd.concat([agg, total], ignore_index=True)
 
-            # ── Mise en forme ────────────────────────
             def fmt_eur(v):
-                try:
-                    return f"{v:,.2f} €".replace(",", " ").replace(".", ",")
-                except Exception:
-                    return v
+                try:    return f"{v:,.2f} €".replace(",", " ").replace(".", ",")
+                except: return v
 
             def fmt_pct(v):
-                try:
-                    return f"{v:.2f} %"
-                except Exception:
-                    return v
+                try:    return f"{v:.2f} %"
+                except: return v
 
-            agg_display["CA_produits_HT"]    = agg_display["CA_produits_HT"].apply(fmt_eur)
+            agg_display["CA_produits_HT"]     = agg_display["CA_produits_HT"].apply(fmt_eur)
             agg_display["CA_final_HT"]        = agg_display["CA_final_HT"].apply(fmt_eur)
             agg_display["Taux_marge_simple"]  = agg_display["Taux_marge_simple"].apply(fmt_pct)
             agg_display["Taux_marge_pondere"] = agg_display["Taux_marge_pondere"].apply(fmt_pct)
@@ -329,11 +411,9 @@ elif page == "📊 Analyse CA par Commercial":
                 "Taux_marge_pondere": "Taux marge pondéré",
             })
 
-            # ── Affichage ────────────────────────────
             st.subheader("Récapitulatif par commercial")
             st.dataframe(agg_display, use_container_width=True, hide_index=True)
 
-            # ── Métriques rapides ────────────────────
             st.subheader("Indicateurs globaux")
             m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("Nb commandes",       f"{df_filtre['Reference'].count():,}".replace(",", " "))
@@ -342,7 +422,6 @@ elif page == "📊 Analyse CA par Commercial":
             m4.metric("Taux marge moyen",   fmt_pct(df_filtre["taux_marge"].mean()))
             m5.metric("Taux marge pondéré", fmt_pct(total_val_marge / total_ca_ht * 100 if total_ca_ht else 0))
 
-            # ── Export ───────────────────────────────
             agg_export = agg.copy()
             col_dl1, col_dl2 = st.columns(2)
             with col_dl1:
