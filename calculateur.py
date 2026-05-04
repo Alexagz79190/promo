@@ -132,11 +132,15 @@ if page == "📦 Calculateur Prix Promo":
                 data[COL_PRIX_ACHAT] = pd.to_numeric(
                     data[COL_PRIX_ACHAT].astype(str).str.replace(",", "."), errors="coerce")
 
-                # Suppression des lignes sans prix valides
+                # Suppression des lignes sans offre valide
+                # (produits sans offre : prix et/ou ID vides après éclatement)
                 before = len(data)
-                data = data.dropna(subset=[COL_PRIX_VENTE, COL_PRIX_ACHAT])
-                if len(data) < before:
-                    update_status(f"{before - len(data)} ligne(s) ignorée(s) : prix manquants ou non numériques.")
+                # "nan" string residuel de l'explode sur valeur vide → nettoyage
+                data[COL_OFFRE_ID] = data[COL_OFFRE_ID].replace("nan", pd.NA)
+                data = data.dropna(subset=[COL_PRIX_VENTE, COL_PRIX_ACHAT, COL_OFFRE_ID])
+                ignores = before - len(data)
+                if ignores > 0:
+                    update_status(f"{ignores} ligne(s) ignorée(s) : produit sans offre (prix ou ID manquant).")
 
                 # ── Chargement exclusions ─────────────────────────────────────
                 update_status("Chargement des exclusions...")
