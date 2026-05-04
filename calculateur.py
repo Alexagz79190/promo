@@ -237,8 +237,8 @@ if page == "📦 Calculateur Prix Promo":
                             'Offre produit (cocher EST identifiant)': row[COL_OFFRE_ID],
                             'Type':                   'promo',
                             'Prix':                   prix_promo_cents,
-                            "Date d'application":     start_datetime.strftime('%d/%m/%Y %H:%M:%S'),
-                            'Date fin (pour promo uniquement)': end_datetime.strftime('%d/%m/%Y %H:%M:%S'),
+                            "Date d'application":     start_datetime.strftime('%Y-%m-%d %H:%M:%S'),
+                            'Date fin (pour promo uniquement)': end_datetime.strftime('%Y-%m-%d %H:%M:%S'),
                             'Prix (ne pas importer)': f"{prix_promo:.2f}",
                         })
                         if taux_marge_promo < 5 or taux_marge_promo > 80:
