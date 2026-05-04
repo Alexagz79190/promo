@@ -17,14 +17,14 @@ def to_excel(df):
 # ─────────────────────────────────────────────
 # Mapping des colonnes du CSV produit
 # ─────────────────────────────────────────────
-COL_CODE        = "Code / Référence Produit"
-COL_PIM_PRODUIT = "pim_key Produit"
-COL_PIM_FAMILLE = "pim_key Famille Produit - Famille"
-COL_PIM_MARQUE  = "pim_key Marque Produit - Marque"
-COL_PIM_FOURN   = "pim_key Fournisseur produit - Fournisseur"
-COL_PRIX_VENTE  = "Prix de vente HT OffreProduit - offres"
-COL_PRIX_ACHAT  = "Prix d'achat HT OffreProduit - offres"
-COL_OFFRE_ID    = "Id OffreProduit - offres"
+COL_CODE        = "Produit - Code / Référence"
+COL_PIM_PRODUIT = "Produit - pim_key"
+COL_PIM_FAMILLE = "Famille Produit - pim_key"
+COL_PIM_MARQUE  = "Marque Produit - pim_key"
+COL_PIM_FOURN   = "Fournisseur produit - pim_key"
+COL_PRIX_VENTE  = "OffreProduit - Prix de vente HT"
+COL_PRIX_ACHAT  = "OffreProduit - Prix d'achat HT"
+COL_OFFRE_ID    = "OffreProduit - Id"
 
 # ─────────────────────────────────────────────
 # NAVIGATION
