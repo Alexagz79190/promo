@@ -59,18 +59,18 @@ if page == "📦 Calculateur Prix Promo":
 
     st.subheader("Chargement des fichiers")
 
-    produit_file = st.file_uploader("Charger le fichier export produit (format CSV)", type=["csv"], key="produit_csv")
     st.info(
-        "Les champs attendus pour le fichier **export produit** (CSV) — l'ordre des colonnes n'est pas important :\n"
-        f"- `{COL_CODE}`\n"
-        f"- `{COL_PIM_PRODUIT}`\n"
-        f"- `{COL_PIM_FAMILLE}`\n"
-        f"- `{COL_PIM_MARQUE}`\n"
-        f"- `{COL_PIM_FOURN}`\n"
-        f"- `{COL_PRIX_VENTE}`\n"
-        f"- `{COL_PRIX_ACHAT}`\n"
-        f"- `{COL_OFFRE_ID}`"
+        "Les champs à sélectionner dans l'interface d'export — l'ordre des colonnes n'est pas important :\n"
+        "- `Code / Référence Produit`\n"
+        "- `pim_key Produit`\n"
+        "- `pim_key Famille Produit - Famille`\n"
+        "- `pim_key Marque Produit - Marque`\n"
+        "- `pim_key Fournisseur produit - Fournisseur`\n"
+        "- `Prix de vente HT OffreProduit - offres`\n"
+        "- `Prix d'achat HT OffreProduit - offres`\n"
+        "- `Id OffreProduit - offres`"
     )
+    produit_file = st.file_uploader("Charger le fichier export produit (format CSV)", type=["csv"], key="produit_csv")
 
     exclusion_file = st.file_uploader("Charger le fichier exclusion produit (format Excel)", type=["xlsx"], key="exclusion")
     remise_file    = st.file_uploader("Charger le fichier remise (format Excel)",            type=["xlsx"], key="remise")
