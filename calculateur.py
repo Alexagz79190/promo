@@ -394,6 +394,7 @@ elif page == "📊 Analyse CA par Commercial":
                 "- `Commande - Etat`\n"
                 "- `Commande - Prix produits (HT)`\n"
                 "- `Commande - Prix final (HT)`\n"
+                "- `Commande - Remise (HT)`\n"
                 "- `Detail de commande - prixAchatHt` *(centimes, séparés par |)*\n"
                 "- `Detail de commande - prixFinalHt` *(centimes, séparés par |)*\n"
                 "- `Detail de commande - Quantité` *(séparés par |)*"
