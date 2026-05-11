@@ -7,15 +7,137 @@ from io import BytesIO
 
 st.set_page_config(page_title="Outils Commerciaux", layout="wide")
 
-# --- Fonction pour convertir un DataFrame en fichier Excel (bytes) ---
-def to_excel(df):
+# ─────────────────────────────────────────────
+# CSS personnalisé — tableaux & UI
+# ─────────────────────────────────────────────
+st.markdown("""
+<style>
+    /* ── Palette & typographie ── */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* ── En-têtes de page ── */
+    h1 { font-size: 1.8rem !important; font-weight: 700 !important; color: #1a202c !important; }
+    h2 { font-size: 1.3rem !important; font-weight: 600 !important; color: #2d3748 !important; }
+    h3 { font-size: 1.1rem !important; font-weight: 600 !important; color: #4a5568 !important; }
+
+    /* ── Tableaux Streamlit (st.dataframe) ── */
+    [data-testid="stDataFrame"] table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.875rem;
+    }
+    [data-testid="stDataFrame"] thead tr th {
+        background-color: #1e3a5f !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 10px 14px !important;
+        border: none !important;
+        white-space: nowrap;
+    }
+    [data-testid="stDataFrame"] tbody tr:nth-child(even) td {
+        background-color: #f0f4f8 !important;
+    }
+    [data-testid="stDataFrame"] tbody tr:last-child td {
+        background-color: #dbeafe !important;
+        font-weight: 700 !important;
+        border-top: 2px solid #1e3a5f !important;
+    }
+    [data-testid="stDataFrame"] tbody tr:hover td {
+        background-color: #e0ecff !important;
+    }
+    [data-testid="stDataFrame"] tbody td {
+        padding: 9px 14px !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+        color: #1a202c;
+    }
+
+    /* ── Métriques ── */
+    [data-testid="stMetric"] {
+        background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+        border: 1px solid #c7d2fe;
+        border-radius: 10px;
+        padding: 14px 18px !important;
+    }
+    [data-testid="stMetricLabel"] { color: #4338ca !important; font-weight: 600 !important; font-size: 0.78rem !important; text-transform: uppercase; letter-spacing: 0.05em; }
+    [data-testid="stMetricValue"] { color: #1e1b4b !important; font-weight: 700 !important; font-size: 1.4rem !important; }
+
+    /* ── Boutons ── */
+    .stButton > button, .stDownloadButton > button {
+        background-color: #1e3a5f !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 7px !important;
+        font-weight: 600 !important;
+        padding: 9px 20px !important;
+        transition: background 0.2s ease, transform 0.1s ease;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        background-color: #2d5282 !important;
+        transform: translateY(-1px);
+    }
+
+    /* ── Séparateur section ── */
+    .section-title {
+        border-left: 4px solid #1e3a5f;
+        padding-left: 10px;
+        margin: 24px 0 12px 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #1e3a5f;
+    }
+
+    /* ── Sidebar ── */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1e3a5f 0%, #2d5282 100%) !important;
+    }
+    [data-testid="stSidebar"] * { color: white !important; }
+    [data-testid="stSidebar"] .stRadio label { font-size: 0.9rem !important; }
+
+    /* ── Alertes ── */
+    .stInfo    { background-color: #eff6ff !important; border-left: 4px solid #3b82f6 !important; border-radius: 6px; }
+    .stSuccess { background-color: #f0fdf4 !important; border-left: 4px solid #22c55e !important; border-radius: 6px; }
+    .stWarning { background-color: #fffbeb !important; border-left: 4px solid #f59e0b !important; border-radius: 6px; }
+    .stError   { background-color: #fef2f2 !important; border-left: 4px solid #ef4444 !important; border-radius: 6px; }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────
+# Utilitaires
+# ─────────────────────────────────────────────
+def to_excel(df: pd.DataFrame) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Sheet1')
     return output.getvalue()
 
+
+def normaliser_auteur(nom: str) -> str:
+    """
+    Normalise un nom d'auteur pour regrouper les variantes d'inversion prénom/nom.
+    'Arthur PITAULT', 'Pitault Arthur', 'PITAULT arthur' → clé identique 'arthur pitault'
+    """
+    if pd.isna(nom) or str(nom).strip() == "":
+        return "(sans commercial)"
+    mots = str(nom).strip().lower().split()
+    return " ".join(sorted(mots))
+
+
+def formatter_auteur(cle: str) -> str:
+    """Capitalise chaque mot de la clé normalisée pour l'affichage."""
+    if cle == "(sans commercial)":
+        return "(Sans commercial)"
+    return " ".join(m.capitalize() for m in cle.split())
+
+
 # ─────────────────────────────────────────────
-# Mapping des colonnes du CSV produit
+# Mapping colonnes CSV produit
 # ─────────────────────────────────────────────
 COL_CODE        = "Produit - Code / Référence"
 COL_PIM_PRODUIT = "Produit - pim_key"
@@ -27,45 +149,35 @@ COL_PRIX_ACHAT  = "OffreProduit - Prix d'achat HT"
 COL_OFFRE_ID    = "OffreProduit - Id"
 
 # ─────────────────────────────────────────────
-# Colonnes du CSV commande (nouveau format détail)
+# Mapping colonnes CSV commande (format détail)
 # ─────────────────────────────────────────────
 COL_DETAIL_ACHAT = "Detail de commande - prixAchatHt"
 COL_DETAIL_VENTE = "Detail de commande - prixFinalHt"
 COL_DETAIL_QTE   = "Detail de commande - Quantité"
 
+
 # ─────────────────────────────────────────────
-# Calcul du taux de marge depuis les détails
+# Calcul taux de marge depuis les détails
 # ─────────────────────────────────────────────
-def compute_taux_marge_from_detail(row):
+def compute_taux_marge_from_detail(row) -> float | None:
     """
     Calcule le taux de marge à partir des colonnes de détail.
 
-    Structure des colonnes (valeurs séparées par |) :
-    - prixFinalHt : prix de vente de la LIGNE en centimes (quantité déjà incluse)
-                   → somme = Prix produits HT (avant remise commande)
-    - prixAchatHt : prix d'achat UNITAIRE en centimes → × quantité
-    - Quantité    : quantités par ligne
-
-    CA réel = Prix produits (HT) - Remise (HT)   ← remise déduite au niveau commande
-    Coût    = Σ (prixAchatHt × Quantité) / 100
-
-    Retourne le taux de marge en % ou None si calcul impossible.
+    - prixFinalHt  : prix de vente de la LIGNE en centimes (quantité incluse)
+    - prixAchatHt  : prix d'achat UNITAIRE en centimes → × quantité
+    - Quantité     : quantités par ligne
+    CA réel = Prix produits (HT) − Remise (HT)
+    Coût    = Σ(prixAchatHt × Quantité) / 100
     """
     try:
         achats = [int(x) for x in str(row[COL_DETAIL_ACHAT]).split("|")]
         qtes   = [int(x) for x in str(row[COL_DETAIL_QTE]).split("|")]
-
         if len(achats) != len(qtes):
             return None
-
-        # prixAchatHt = unitaire → on multiplie par la quantité
         total_achat_eur = sum(a * q for a, q in zip(achats, qtes)) / 100.0
-
-        # CA réel = prix produits HT - remise commande
-        prix_produits = float(row["Prix produits (HT)"])
-        remise        = float(row["Remise (HT)"]) if pd.notna(row.get("Remise (HT)")) else 0.0
-        ca_reel       = prix_produits - remise
-
+        prix_produits   = float(row["Prix produits (HT)"])
+        remise          = float(row["Remise (HT)"]) if pd.notna(row.get("Remise (HT)")) else 0.0
+        ca_reel         = prix_produits - remise
         if ca_reel > 0:
             return round((ca_reel - total_achat_eur) / ca_reel * 100, 2)
         return None
@@ -73,15 +185,26 @@ def compute_taux_marge_from_detail(row):
         return None
 
 
+def compute_total_achat(row) -> float | None:
+    try:
+        achats = [int(x) for x in str(row[COL_DETAIL_ACHAT]).split("|")]
+        qtes   = [int(x) for x in str(row[COL_DETAIL_QTE]).split("|")]
+        return round(sum(a * q for a, q in zip(achats, qtes)) / 100.0, 2)
+    except Exception:
+        return None
+
+
 # ─────────────────────────────────────────────
 # NAVIGATION
 # ─────────────────────────────────────────────
-st.sidebar.title("Navigation")
+st.sidebar.title("⚙️ Outils Commerciaux")
+st.sidebar.markdown("---")
 page = st.sidebar.radio(
-    "Choisir une page",
+    "Navigation",
     ["📦 Calculateur Prix Promo", "📊 Analyse CA par Commercial"],
     label_visibility="collapsed"
 )
+
 
 # ══════════════════════════════════════════════
 # PAGE 1 — CALCULATEUR PRIX PROMO
@@ -95,59 +218,75 @@ if page == "📦 Calculateur Prix Promo":
 
     log_container = st.empty()
 
-    def update_status(message):
-        st.session_state["log"].append(f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - {message}")
-        st.session_state["log_display"] = "\n".join(st.session_state["log"])
-        log_container.text_area("Journal des actions", st.session_state["log_display"], height=200, disabled=True)
+    def update_status(message: str):
+        st.session_state["log"].append(
+            f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} — {message}"
+        )
+        log_container.text_area(
+            "Journal des actions",
+            "\n".join(st.session_state["log"]),
+            height=200,
+            disabled=True
+        )
         time.sleep(0.1)
 
-    st.title("Calculateur de Prix Promo")
+    st.title("📦 Calculateur de Prix Promo")
     st.sidebar.header("Paramètres")
 
-    st.subheader("Chargement des fichiers")
+    st.markdown('<p class="section-title">Chargement des fichiers</p>', unsafe_allow_html=True)
 
     st.info(
-        "Les champs à sélectionner dans l'interface d'export — l'ordre des colonnes n'est pas important :\n"
+        "**Champs à sélectionner dans l'interface d'export** (l'ordre des colonnes n'est pas important) :\n"
         "- `Code / Référence Produit`\n"
         "- `pim_key Produit`\n"
-        "- `pim_key Famille Produit - Famille`\n"
-        "- `pim_key Marque Produit - Marque`\n"
-        "- `pim_key Fournisseur produit - Fournisseur`\n"
-        "- `Prix de vente HT OffreProduit - offres`\n"
-        "- `Prix d'achat HT OffreProduit - offres`\n"
-        "- `Id OffreProduit - offres`"
+        "- `pim_key Famille Produit`\n"
+        "- `pim_key Marque Produit`\n"
+        "- `pim_key Fournisseur produit`\n"
+        "- `Prix de vente HT OffreProduit`\n"
+        "- `Prix d'achat HT OffreProduit`\n"
+        "- `Id OffreProduit`"
     )
-    produit_file = st.file_uploader("Charger le fichier export produit (format CSV)", type=["csv"], key="produit_csv")
 
-    exclusion_file = st.file_uploader("Charger le fichier exclusion produit (format Excel)", type=["xlsx"], key="exclusion")
-    remise_file    = st.file_uploader("Charger le fichier remise (format Excel)",            type=["xlsx"], key="remise")
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        produit_file   = st.file_uploader("📄 Export produit (CSV)",    type=["csv"],  key="produit_csv")
+    with col_f2:
+        exclusion_file = st.file_uploader("🚫 Fichier exclusion (Excel)", type=["xlsx"], key="exclusion")
+    with col_f3:
+        remise_file    = st.file_uploader("💰 Fichier remise (Excel)",    type=["xlsx"], key="remise")
 
-    st.subheader("Sélection des dates")
-    start_date = st.date_input("Date de début",  value=datetime.now().date(), key="sd")
-    start_time = st.time_input("Heure de début", value=dt_time(0, 0),        key="st")
-    end_date   = st.date_input("Date de fin",    value=datetime.now().date(), key="ed")
-    end_time   = st.time_input("Heure de fin",   value=dt_time(23, 59),      key="et")
+    st.markdown('<p class="section-title">Période promotionnelle</p>', unsafe_allow_html=True)
+    col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+    with col_d1:
+        start_date = st.date_input("Date de début",  value=datetime.now().date(), key="sd")
+    with col_d2:
+        start_time = st.time_input("Heure de début", value=dt_time(0, 0),        key="st")
+    with col_d3:
+        end_date   = st.date_input("Date de fin",    value=datetime.now().date(), key="ed")
+    with col_d4:
+        end_time   = st.time_input("Heure de fin",   value=dt_time(23, 59),      key="et")
+
     start_datetime = datetime.combine(start_date, start_time)
     end_datetime   = datetime.combine(end_date,   end_time)
 
-    if st.button("Démarrer le calcul"):
+    st.markdown("")
+    if st.button("🚀 Démarrer le calcul"):
         st.session_state["log"] = []
         st.session_state["calcul_done"] = False
 
         try:
             if not (produit_file and exclusion_file and remise_file):
                 st.error("Veuillez charger tous les fichiers requis.")
-                update_status("Erreur : Fichiers manquants.")
+                update_status("Erreur : fichiers manquants.")
             elif not (start_datetime and end_datetime):
                 st.error("Veuillez spécifier les dates et heures de début et de fin.")
-                update_status("Erreur : Dates ou heures manquantes.")
+                update_status("Erreur : dates ou heures manquantes.")
             else:
                 # ── Chargement produits ───────────────────────────────────────
                 update_status("Chargement des données produit (CSV)...")
                 data = pd.read_csv(produit_file)
-                update_status(f"Nombre de lignes chargées : {len(data)}")
+                update_status(f"Lignes chargées : {len(data):,}")
 
-                # Vérification que toutes les colonnes attendues sont présentes
                 colonnes_requises = [COL_CODE, COL_PIM_PRODUIT, COL_PIM_FAMILLE,
                                      COL_PIM_MARQUE, COL_PIM_FOURN,
                                      COL_PRIX_VENTE, COL_PRIX_ACHAT, COL_OFFRE_ID]
@@ -157,44 +296,35 @@ if page == "📦 Calculateur Prix Promo":
                     update_status(f"Erreur : colonnes manquantes : {colonnes_manquantes}")
                     st.stop()
 
-                # ── Dédoublonnage multi-offres (valeurs séparées par |) ───────
+                # ── Éclatement multi-offres ───────────────────────────────────
                 cols_a_eclater = [COL_PRIX_VENTE, COL_PRIX_ACHAT, COL_OFFRE_ID]
                 for col in cols_a_eclater:
                     data[col] = data[col].astype(str).str.split('|')
-                avant_eclatement = len(data)
+                avant = len(data)
                 data = data.explode(cols_a_eclater).reset_index(drop=True)
-                if len(data) > avant_eclatement:
-                    update_status(
-                        f"Dédoublonnage multi-offres : {avant_eclatement} ligne(s) → "
-                        f"{len(data)} ligne(s) après éclatement."
-                    )
-                update_status(f"Nombre de produits/offres à traiter : {len(data)}")
+                if len(data) > avant:
+                    update_status(f"Éclatement multi-offres : {avant:,} → {len(data):,} lignes.")
+                update_status(f"Produits / offres à traiter : {len(data):,}")
 
-                # Nettoyage colonnes numériques (gestion virgule/point)
                 data[COL_PRIX_VENTE] = pd.to_numeric(
                     data[COL_PRIX_VENTE].astype(str).str.replace(",", "."), errors="coerce")
                 data[COL_PRIX_ACHAT] = pd.to_numeric(
                     data[COL_PRIX_ACHAT].astype(str).str.replace(",", "."), errors="coerce")
 
-                # Suppression des lignes sans offre valide
                 before = len(data)
                 data[COL_OFFRE_ID] = data[COL_OFFRE_ID].replace("nan", pd.NA)
                 data = data.dropna(subset=[COL_PRIX_VENTE, COL_PRIX_ACHAT, COL_OFFRE_ID])
-                ignores = before - len(data)
-                if ignores > 0:
-                    update_status(f"{ignores} ligne(s) ignorée(s) : produit sans offre (prix ou ID manquant).")
+                if (ignores := before - len(data)) > 0:
+                    update_status(f"{ignores:,} ligne(s) ignorée(s) : offre sans prix ou ID.")
 
-                # ── Chargement exclusions ─────────────────────────────────────
+                # ── Exclusions ────────────────────────────────────────────────
                 update_status("Chargement des exclusions...")
                 exclusions_data = pd.ExcelFile(exclusion_file)
 
-                excl_code_agz = (exclusions_data.parse('Code AGZ')['Code AGZ']
-                                 .dropna().astype(str).tolist())
-                excl_fournisseur = (exclusions_data.parse('Founisseur ')['Identifiant fournisseur seul']
-                                    .dropna().astype(str).tolist())
-                excl_marque = (exclusions_data.parse('Marque')['Identifiant marque seul']
-                               .dropna().astype(str).tolist())
-                excl_ff = exclusions_data.parse('Fournisseur famille')[
+                excl_code_agz    = exclusions_data.parse('Code AGZ')['Code AGZ'].dropna().astype(str).tolist()
+                excl_fournisseur = exclusions_data.parse('Founisseur ')['Identifiant fournisseur seul'].dropna().astype(str).tolist()
+                excl_marque      = exclusions_data.parse('Marque')['Identifiant marque seul'].dropna().astype(str).tolist()
+                excl_ff          = exclusions_data.parse('Fournisseur famille')[
                     ['Identifiant fournisseur', 'Identifiant famille']
                 ].astype(str)
 
@@ -205,90 +335,81 @@ if page == "📦 Calculateur Prix Promo":
                     columns=['Identifiant fournisseur', 'Identifiant famille']
                 )
 
-                # ── Application des exclusions ────────────────────────────────
                 update_status("Application des exclusions...")
-
-                data[COL_PIM_PRODUIT] = data[COL_PIM_PRODUIT].astype(str)
-                data[COL_PIM_FOURN]   = data[COL_PIM_FOURN].astype(str)
-                data[COL_PIM_MARQUE]  = data[COL_PIM_MARQUE].astype(str)
-                data[COL_PIM_FAMILLE] = data[COL_PIM_FAMILLE].astype(str)
+                for col in [COL_PIM_PRODUIT, COL_PIM_FOURN, COL_PIM_MARQUE, COL_PIM_FAMILLE]:
+                    data[col] = data[col].astype(str)
 
                 data['Exclusion Reason'] = None
                 data.loc[data[COL_CODE].astype(str).isin(excl_code_agz),
-                         'Exclusion Reason'] = 'Exclus car présent dans Code AGZ fichier exclus'
+                         'Exclusion Reason'] = 'Exclus — Code AGZ'
                 data.loc[data[COL_PIM_FOURN].isin(excl_fournisseur),
-                         'Exclusion Reason'] = 'Exclus car présent dans Fournisseur fichier exclus'
+                         'Exclusion Reason'] = 'Exclus — Fournisseur'
                 data.loc[data[COL_PIM_MARQUE].isin(excl_marque),
-                         'Exclusion Reason'] = 'Exclus car présent dans Marque fichier exclus'
+                         'Exclusion Reason'] = 'Exclus — Marque'
 
                 data_merged = data.merge(
-                    all_combinations_df,
-                    how='left',
+                    all_combinations_df, how='left',
                     left_on=[COL_PIM_FOURN, COL_PIM_FAMILLE],
                     right_on=['Identifiant fournisseur', 'Identifiant famille'],
                     indicator=True
                 )
                 data_merged.loc[data_merged['_merge'] == 'both', 'Exclusion Reason'] = (
-                    'Exclus car présent dans Fournisseur famille du fichier exclus'
+                    'Exclus — Fournisseur × Famille'
                 )
 
                 data_excluded  = data_merged[data_merged['Exclusion Reason'].notna()].copy()
                 data_processed = data_merged[data_merged['Exclusion Reason'].isna()].copy()
-                data_processed = data_processed.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
-                data_excluded  = data_excluded.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'])
+                for df_ in [data_processed, data_excluded]:
+                    df_.drop(columns=['Identifiant fournisseur', 'Identifiant famille', '_merge'],
+                             inplace=True)
 
-                update_status(f"Produits exclus via fichier exclus : {len(data_excluded)}")
-                update_status(f"Produits restants après exclusions : {len(data_processed)}")
+                update_status(f"Produits exclus : {len(data_excluded):,}")
+                update_status(f"Produits à traiter : {len(data_processed):,}")
 
-                # ── Chargement remises ────────────────────────────────────────
+                # ── Remises ───────────────────────────────────────────────────
                 update_status("Chargement des remises...")
                 remises = pd.read_excel(remise_file)
 
                 # ── Calcul des prix promo ─────────────────────────────────────
                 update_status("Calcul des prix promo...")
-                result                      = []
-                margin_issues               = []
-                exclusion_reasons_from_calc = []
+                result, margin_issues, exclusion_reasons_from_calc = [], [], []
 
                 for _, row in data_processed.iterrows():
-                    prix_vente = row[COL_PRIX_VENTE]
-                    prix_achat = row[COL_PRIX_ACHAT]
-
-                    if pd.isna(prix_vente) or pd.isna(prix_achat) or prix_vente <= 0:
+                    pv = row[COL_PRIX_VENTE]
+                    pa = row[COL_PRIX_ACHAT]
+                    if pd.isna(pv) or pd.isna(pa) or pv <= 0:
                         continue
 
-                    marge = round((prix_vente - prix_achat) / prix_vente * 100, 2)
-
-                    remise_appliquee = 0
-                    remise_raison    = ""
-                    for _, remise_row in remises.iterrows():
-                        if remise_row['Marge minimale'] <= marge <= remise_row['Marge maximale']:
-                            remise_appliquee = remise_row['Remise'] / 100
+                    marge = round((pv - pa) / pv * 100, 2)
+                    remise_appliquee, remise_raison = 0, ""
+                    for _, r in remises.iterrows():
+                        if r['Marge minimale'] <= marge <= r['Marge maximale']:
+                            remise_appliquee = r['Remise'] / 100
                             remise_raison    = (
-                                f"Remise appliquée : {remise_row['Remise']}% "
-                                f"(Marge entre {remise_row['Marge minimale']}% et {remise_row['Marge maximale']}%)"
+                                f"Remise {r['Remise']}% "
+                                f"(marge entre {r['Marge minimale']}% et {r['Marge maximale']}%)"
                             )
                             break
 
-                    prix_promo       = round(prix_vente * (1 - remise_appliquee), 2)
+                    prix_promo       = round(pv * (1 - remise_appliquee), 2)
                     prix_promo_cents = int(round(prix_promo * 100))
-                    taux_marge_promo = round((prix_promo - prix_achat) / prix_promo * 100, 2) if prix_promo > 0 else None
+                    taux_marge_promo = round((prix_promo - pa) / prix_promo * 100, 2) if prix_promo > 0 else None
 
-                    if prix_vente != prix_promo and pd.notna(taux_marge_promo):
+                    if pv != prix_promo and pd.notna(taux_marge_promo):
                         result.append({
                             'Offre produit (cocher EST identifiant)': row[COL_OFFRE_ID],
-                            'Type':                   'promo',
-                            'Prix':                   prix_promo_cents,
-                            "Date d'application":     start_datetime.strftime('%Y-%m-%d %H:%M:%S'),
+                            'Type':   'promo',
+                            'Prix':   prix_promo_cents,
+                            "Date d'application":               start_datetime.strftime('%Y-%m-%d %H:%M:%S'),
                             'Date fin (pour promo uniquement)': end_datetime.strftime('%Y-%m-%d %H:%M:%S'),
-                            'Prix (ne pas importer)': f"{prix_promo:.2f}",
+                            'Prix (ne pas importer)':           f"{prix_promo:.2f}",
                         })
                         if taux_marge_promo < 5 or taux_marge_promo > 80:
                             margin_issues.append({
                                 COL_CODE:                        row[COL_CODE],
                                 COL_OFFRE_ID:                    row[COL_OFFRE_ID],
-                                'Prix de vente HT':              prix_vente,
-                                "Prix d'achat HT":               prix_achat,
+                                'Prix de vente HT':              pv,
+                                "Prix d'achat HT":               pa,
                                 'Prix promo calculé (HT)':       prix_promo,
                                 'Prix promo calculé (centimes)': prix_promo_cents,
                                 'Taux marge promo':              taux_marge_promo,
@@ -297,14 +418,14 @@ if page == "📦 Calculateur Prix Promo":
                         exclusion_reasons_from_calc.append({
                             COL_CODE:               row[COL_CODE],
                             COL_OFFRE_ID:           row[COL_OFFRE_ID],
-                            'Raison exclusion':     'Exclus car le prix promo est supérieur ou égal au prix de vente',
-                            'Prix de vente HT':     prix_vente,
-                            "Prix d'achat HT":      prix_achat,
+                            'Raison exclusion':     'Prix promo ≥ prix de vente',
+                            'Prix de vente HT':     pv,
+                            "Prix d'achat HT":      pa,
                             'Remise appliquée (%)': remise_appliquee * 100,
                             'Raison de la remise':  remise_raison,
                         })
 
-                # ── Construction du fichier exclus final ──────────────────────
+                # ── Construction fichier exclus final ─────────────────────────
                 if not data_excluded.empty:
                     excluded_from_exclus = data_excluded[[
                         COL_CODE, COL_OFFRE_ID, COL_PRIX_VENTE, COL_PRIX_ACHAT, 'Exclusion Reason'
@@ -318,41 +439,41 @@ if page == "📦 Calculateur Prix Promo":
                     excluded_from_exclus['Raison de la remise']  = ""
                 else:
                     excluded_from_exclus = pd.DataFrame(columns=[
-                        COL_CODE, COL_OFFRE_ID,
-                        'Prix de vente HT', "Prix d'achat HT",
+                        COL_CODE, COL_OFFRE_ID, 'Prix de vente HT', "Prix d'achat HT",
                         'Raison exclusion', 'Remise appliquée (%)', 'Raison de la remise'
                     ])
 
-                exclusion_from_calc_df = pd.DataFrame(exclusion_reasons_from_calc)
-                exclusion_final_df     = pd.concat([excluded_from_exclus, exclusion_from_calc_df], ignore_index=True)
+                exclusion_final_df = pd.concat(
+                    [excluded_from_exclus, pd.DataFrame(exclusion_reasons_from_calc)],
+                    ignore_index=True
+                )
 
                 st.session_state["result_df"]            = pd.DataFrame(result)
                 st.session_state["margin_issues_df"]     = pd.DataFrame(margin_issues)
                 st.session_state["exclusion_reasons_df"] = exclusion_final_df
                 st.session_state["calcul_done"]          = True
-
-                update_status(f"Calcul terminé — {len(result)} offres promo générées.")
+                update_status(f"✅ Calcul terminé — {len(result):,} offres promo générées.")
 
         except Exception as e:
             st.error(f"Une erreur est survenue : {e}")
             update_status(f"Erreur : {e}")
 
     if st.session_state.get("calcul_done"):
-        st.success(f"✅ {len(st.session_state['result_df'])} offres promo prêtes.")
-
+        st.success(f"✅ **{len(st.session_state['result_df']):,} offres promo** prêtes à l'export.")
+        st.markdown('<p class="section-title">Téléchargements</p>', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
             st.download_button(
-                "⬇️ Télécharger les résultats (CSV)",
+                "⬇️ Résultats (CSV)",
                 data=st.session_state["result_df"].to_csv(index=False, sep=';', encoding="utf-8"),
                 file_name="prix_promo_output.csv",
                 mime="text/csv"
             )
         with col2:
             st.download_button(
-                "⬇️ Produits avec problèmes de marge (Excel)",
+                "⬇️ Problèmes de marge (Excel)",
                 data=to_excel(st.session_state["margin_issues_df"]),
-                file_name="produits_avec_problemes_de_marge.xlsx",
+                file_name="produits_problemes_marge.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         with col3:
@@ -371,13 +492,11 @@ elif page == "📊 Analyse CA par Commercial":
 
     st.title("📊 Analyse CA par Commercial")
 
-    # ── Aide sur les deux formats acceptés ───────────────────────────────────
     with st.expander("ℹ️ Formats de fichier acceptés", expanded=False):
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown(
                 "**Format A — colonne `taux_marge` pré-calculée**\n\n"
-                "Colonnes attendues :\n"
                 "- `Commande - Reference`\n"
                 "- `Commande - Auteur`\n"
                 "- `Commande - Etat`\n"
@@ -387,8 +506,7 @@ elif page == "📊 Analyse CA par Commercial":
             )
         with col_b:
             st.markdown(
-                "**Format B — détails de commande (nouveau)**\n\n"
-                "Colonnes attendues :\n"
+                "**Format B — détails de commande**\n\n"
                 "- `Commande - Reference`\n"
                 "- `Commande - Auteur`\n"
                 "- `Commande - Etat`\n"
@@ -400,7 +518,7 @@ elif page == "📊 Analyse CA par Commercial":
                 "- `Detail de commande - Quantité` *(séparés par |)*"
             )
 
-    csv_file = st.file_uploader("Charger le fichier export commandes (CSV)", type=["csv"], key="ca_csv")
+    csv_file = st.file_uploader("📄 Charger le fichier export commandes (CSV)", type=["csv"], key="ca_csv")
 
     if csv_file is not None:
         df = pd.read_csv(csv_file)
@@ -410,76 +528,50 @@ elif page == "📊 Analyse CA par Commercial":
         df["Prix final (HT)"]    = pd.to_numeric(df["Prix final (HT)"],    errors="coerce")
         df["Remise (HT)"]        = pd.to_numeric(df.get("Remise (HT)"),    errors="coerce").fillna(0)
 
-        # ── Détection du format et calcul du taux de marge ───────────────────
-        # Après strip des préfixes, les colonnes détail deviennent :
-        col_detail_achat_stripped = COL_DETAIL_ACHAT.replace("Commande - ", "").strip()
-        col_detail_vente_stripped = COL_DETAIL_VENTE.replace("Commande - ", "").strip()
-        col_detail_qte_stripped   = COL_DETAIL_QTE.replace("Commande - ", "").strip()
+        col_detail_achat_s = COL_DETAIL_ACHAT.replace("Commande - ", "").strip()
+        col_detail_vente_s = COL_DETAIL_VENTE.replace("Commande - ", "").strip()
+        col_detail_qte_s   = COL_DETAIL_QTE.replace("Commande - ", "").strip()
 
-        has_detail_cols = all(c in df.columns for c in [
-            col_detail_achat_stripped,
-            col_detail_vente_stripped,
-            col_detail_qte_stripped,
-        ])
-        has_taux_marge = "taux_marge" in df.columns
+        has_detail_cols = all(c in df.columns for c in [col_detail_achat_s, col_detail_vente_s, col_detail_qte_s])
+        has_taux_marge  = "taux_marge" in df.columns
 
         if has_detail_cols:
-            # ── Format B : calcul depuis les lignes de détail ─────────────────
-            st.info(
-                "📋 **Format B détecté** — taux de marge calculé depuis les détails de commande "
-                "(prix achat unitaire × quantité vs prix produits HT)."
-            )
-
-            # On renomme les colonnes détail (déjà strippées du préfixe "Commande - ")
-            # pour correspondre aux constantes utilisées dans compute_taux_marge_from_detail
-            rename_map = {
-                col_detail_achat_stripped: COL_DETAIL_ACHAT,
-                col_detail_vente_stripped: COL_DETAIL_VENTE,
-                col_detail_qte_stripped:   COL_DETAIL_QTE,
-            }
-            df = df.rename(columns=rename_map)
-
-            df["taux_marge"] = df.apply(compute_taux_marge_from_detail, axis=1)
-
-            # Calcul du total achat (en €) pour affichage dans le détail export
-            def compute_total_achat(row):
-                try:
-                    achats = [int(x) for x in str(row[COL_DETAIL_ACHAT]).split("|")]
-                    qtes   = [int(x) for x in str(row[COL_DETAIL_QTE]).split("|")]
-                    # prixAchatHt = unitaire → × quantité
-                    return round(sum(a * q for a, q in zip(achats, qtes)) / 100.0, 2)
-                except Exception:
-                    return None
-
+            st.info("📋 **Format B détecté** — taux de marge calculé depuis les détails de commande.")
+            df = df.rename(columns={
+                col_detail_achat_s: COL_DETAIL_ACHAT,
+                col_detail_vente_s: COL_DETAIL_VENTE,
+                col_detail_qte_s:   COL_DETAIL_QTE,
+            })
+            df["taux_marge"]     = df.apply(compute_taux_marge_from_detail, axis=1)
             df["total_achat_HT"] = df.apply(compute_total_achat, axis=1)
 
-            nb_sans_marge = df["taux_marge"].isna().sum()
-            if nb_sans_marge > 0:
-                st.warning(
-                    f"⚠️ {nb_sans_marge} commande(s) sans taux de marge calculable "
-                    "(données de détail manquantes ou invalides)."
-                )
+            if (nb_sans_marge := df["taux_marge"].isna().sum()) > 0:
+                st.warning(f"⚠️ {nb_sans_marge:,} commande(s) sans taux de marge calculable.")
 
         elif has_taux_marge:
-            # ── Format A : colonne taux_marge existante ───────────────────────
             st.info("📋 **Format A détecté** — taux de marge lu depuis la colonne `taux_marge`.")
-            df["taux_marge"] = pd.to_numeric(df["taux_marge"], errors="coerce")
-            df["total_achat_HT"] = None  # non disponible dans ce format
+            df["taux_marge"]     = pd.to_numeric(df["taux_marge"], errors="coerce")
+            df["total_achat_HT"] = None
 
         else:
             st.error(
-                "❌ Format non reconnu. Le fichier doit contenir soit la colonne `taux_marge`, "
-                "soit les trois colonnes de détail : "
-                "`Detail de commande - prixAchatHt`, `Detail de commande - prixFinalHt`, "
-                "`Detail de commande - Quantité`."
+                "❌ Format non reconnu. Le fichier doit contenir soit `taux_marge`, "
+                "soit les trois colonnes de détail."
             )
             st.stop()
 
-        # ── Nettoyage commun ──────────────────────────────────────────────────
-        df["Auteur"] = df["Auteur"].fillna("(Sans commercial)").str.strip()
-        df["Etat"]   = df["Etat"].fillna("(Inconnu)").str.strip()
+        # ── Normalisation des auteurs ─────────────────────────────────────────
+        # Regroupe les variantes d'inversion prénom/nom (ex: "Arthur PITAULT" = "Pitault Arthur")
+        df["Auteur"] = (
+            df["Auteur"]
+            .fillna("(Sans commercial)")
+            .apply(normaliser_auteur)
+            .apply(formatter_auteur)
+        )
+        df["Etat"] = df["Etat"].fillna("(Inconnu)").str.strip()
 
-        st.subheader("Filtres")
+        # ── Filtres ───────────────────────────────────────────────────────────
+        st.markdown('<p class="section-title">Filtres</p>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
 
         auteurs_dispo = sorted(df["Auteur"].unique().tolist())
@@ -487,14 +579,14 @@ elif page == "📊 Analyse CA par Commercial":
 
         with col1:
             auteurs_sel = st.multiselect(
-                "Auteur(s)", options=auteurs_dispo, default=[],
-                placeholder="Sélectionner des commerciaux…"
+                "👤 Commercial(aux)", options=auteurs_dispo, default=[],
+                placeholder="Tous les commerciaux…"
             )
         with col2:
             etats_preselectes = [e for e in ["en_preparation", "expedie", "valide"] if e in etats_dispo]
             etats_sel = st.multiselect(
-                "État(s)", options=etats_dispo, default=etats_preselectes,
-                placeholder="Sélectionner des états…"
+                "📌 État(s)", options=etats_dispo, default=etats_preselectes,
+                placeholder="Tous les états…"
             )
 
         masque_auteur = df["Auteur"].isin(auteurs_sel) if auteurs_sel else pd.Series([True] * len(df), index=df.index)
@@ -506,46 +598,47 @@ elif page == "📊 Analyse CA par Commercial":
         if df_filtre.empty:
             st.warning("Aucune commande ne correspond à la sélection.")
         else:
-            # ── Agrégation par commercial ─────────────────────────────────────
-            # Marge pondérée : on utilise total_achat_HT si disponible (Format B),
-            # sinon on replie sur la méthode classique (taux_marge × prix_produits).
+            # ── Calcul des valeurs ────────────────────────────────────────────
             if has_detail_cols:
-                df_filtre["ca_reel"]       = df_filtre["Prix produits (HT)"] - df_filtre["Remise (HT)"].fillna(0)
-                df_filtre["valeur_achat"]  = df_filtre["total_achat_HT"]
-                df_filtre["valeur_marge"]  = df_filtre["ca_reel"] - df_filtre["total_achat_HT"]
+                df_filtre["ca_reel"]      = df_filtre["Prix produits (HT)"] - df_filtre["Remise (HT)"].fillna(0)
+                df_filtre["valeur_achat"] = df_filtre["total_achat_HT"]
+                df_filtre["valeur_marge"] = df_filtre["ca_reel"] - df_filtre["total_achat_HT"]
             else:
-                df_filtre["ca_reel"]       = df_filtre["Prix produits (HT)"]
-                df_filtre["valeur_marge"]  = df_filtre["Prix produits (HT)"] * df_filtre["taux_marge"] / 100
-                df_filtre["valeur_achat"]  = df_filtre["Prix produits (HT)"] - df_filtre["valeur_marge"]
+                df_filtre["ca_reel"]      = df_filtre["Prix produits (HT)"]
+                df_filtre["valeur_marge"] = df_filtre["Prix produits (HT)"] * df_filtre["taux_marge"] / 100
+                df_filtre["valeur_achat"] = df_filtre["Prix produits (HT)"] - df_filtre["valeur_marge"]
 
+            # ── Agrégation par commercial ─────────────────────────────────────
             agg = (
                 df_filtre
                 .groupby("Auteur", as_index=False)
                 .agg(
-                    Nb_commandes      =("Reference",          "count"),
-                    CA_produits_HT    =("Prix produits (HT)", "sum"),
-                    CA_final_HT       =("Prix final (HT)",    "sum"),
-                    _val_marge        =("valeur_marge",       "sum"),
-                    _val_achat        =("valeur_achat",       "sum"),
-                    Taux_marge_simple =("taux_marge",         "mean"),
+                    Nb_commandes   =("Reference",          "count"),
+                    CA_produits_HT =("Prix produits (HT)", "sum"),
+                    CA_final_HT    =("Prix final (HT)",    "sum"),
+                    _val_marge     =("valeur_marge",       "sum"),
+                    _val_achat     =("valeur_achat",       "sum"),
+                    Taux_marge_moy =("taux_marge",         "mean"),
                 )
                 .sort_values("CA_final_HT", ascending=False)
             )
             agg["Taux_marge_pondere"] = agg["_val_marge"] / agg["CA_produits_HT"] * 100
-            agg = agg.drop(columns=["_val_marge", "_val_achat"])
+            agg.drop(columns=["_val_marge", "_val_achat"], inplace=True)
 
+            # ── Ligne TOTAL ───────────────────────────────────────────────────
             total_ca_ht     = df_filtre["ca_reel"].sum()
             total_val_marge = df_filtre["valeur_marge"].sum()
             total = pd.DataFrame([{
-                "Auteur":             "**TOTAL**",
-                "Nb_commandes":       agg["Nb_commandes"].sum(),
+                "Auteur":             "TOTAL",
+                "Nb_commandes":       int(agg["Nb_commandes"].sum()),
                 "CA_produits_HT":     agg["CA_produits_HT"].sum(),
                 "CA_final_HT":        agg["CA_final_HT"].sum(),
-                "Taux_marge_simple":  df_filtre["taux_marge"].mean(),
+                "Taux_marge_moy":     df_filtre["taux_marge"].mean(),
                 "Taux_marge_pondere": total_val_marge / total_ca_ht * 100 if total_ca_ht else 0,
             }])
             agg_display = pd.concat([agg, total], ignore_index=True)
 
+            # ── Formatage pour affichage ──────────────────────────────────────
             def fmt_eur(v):
                 try:    return f"{v:,.2f} €".replace(",", " ").replace(".", ",")
                 except: return v
@@ -554,24 +647,30 @@ elif page == "📊 Analyse CA par Commercial":
                 try:    return f"{v:.2f} %"
                 except: return v
 
+            def fmt_int(v):
+                try:    return f"{int(v):,}".replace(",", " ")
+                except: return v
+
             agg_display["CA_produits_HT"]     = agg_display["CA_produits_HT"].apply(fmt_eur)
             agg_display["CA_final_HT"]        = agg_display["CA_final_HT"].apply(fmt_eur)
-            agg_display["Taux_marge_simple"]  = agg_display["Taux_marge_simple"].apply(fmt_pct)
+            agg_display["Taux_marge_moy"]     = agg_display["Taux_marge_moy"].apply(fmt_pct)
             agg_display["Taux_marge_pondere"] = agg_display["Taux_marge_pondere"].apply(fmt_pct)
+            agg_display["Nb_commandes"]       = agg_display["Nb_commandes"].apply(fmt_int)
 
             agg_display = agg_display.rename(columns={
                 "Auteur":             "Commercial",
                 "Nb_commandes":       "Nb commandes",
                 "CA_produits_HT":     "CA Produits HT",
                 "CA_final_HT":        "CA Final HT",
-                "Taux_marge_simple":  "Taux marge moyen",
+                "Taux_marge_moy":     "Taux marge moyen",
                 "Taux_marge_pondere": "Taux marge pondéré",
             })
 
-            st.subheader("Récapitulatif par commercial")
+            st.markdown('<p class="section-title">Récapitulatif par commercial</p>', unsafe_allow_html=True)
             st.dataframe(agg_display, use_container_width=True, hide_index=True)
 
-            st.subheader("Indicateurs globaux")
+            # ── Indicateurs globaux ───────────────────────────────────────────
+            st.markdown('<p class="section-title">Indicateurs globaux</p>', unsafe_allow_html=True)
             m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("Nb commandes",       f"{df_filtre['Reference'].count():,}".replace(",", " "))
             m2.metric("CA Produits HT",     fmt_eur(total_ca_ht))
@@ -580,32 +679,27 @@ elif page == "📊 Analyse CA par Commercial":
             m5.metric("Taux marge pondéré", fmt_pct(total_val_marge / total_ca_ht * 100 if total_ca_ht else 0))
 
             # ── Exports ───────────────────────────────────────────────────────
+            st.markdown('<p class="section-title">Téléchargements</p>', unsafe_allow_html=True)
             agg_export = agg.copy()
             col_dl1, col_dl2 = st.columns(2)
 
             with col_dl1:
                 st.download_button(
-                    "⬇️ Télécharger le récapitulatif (Excel)",
+                    "⬇️ Récapitulatif par commercial (Excel)",
                     data=to_excel(agg_export),
                     file_name="ca_par_commercial.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-
             with col_dl2:
-                # Colonnes de base communes aux deux formats
                 detail_cols = ["Reference", "Auteur", "Etat",
                                "Prix produits (HT)", "Prix final (HT)",
                                "taux_marge", "valeur_marge"]
-
-                # Ajout des colonnes spécifiques au Format B si disponibles
                 if has_detail_cols:
-                    detail_cols += ["total_achat_HT",
-                                    COL_DETAIL_ACHAT, COL_DETAIL_VENTE, COL_DETAIL_QTE]
-
+                    detail_cols += ["total_achat_HT", COL_DETAIL_ACHAT, COL_DETAIL_VENTE, COL_DETAIL_QTE]
                 detail_export = df_filtre[[c for c in detail_cols if c in df_filtre.columns]].copy()
 
                 st.download_button(
-                    "⬇️ Télécharger le détail des commandes (Excel)",
+                    "⬇️ Détail des commandes (Excel)",
                     data=to_excel(detail_export),
                     file_name="detail_commandes.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -613,6 +707,3 @@ elif page == "📊 Analyse CA par Commercial":
 
     else:
         st.info("👆 Chargez un fichier CSV pour démarrer l'analyse.")
-        st.markdown(
-            "Le script accepte deux formats — voir le panneau *Formats de fichier acceptés* ci-dessus."
-        )
